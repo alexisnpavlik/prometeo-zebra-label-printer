@@ -61,6 +61,8 @@ jobs:
           cp artefactos/etiquetas-zebra-windows/etiquetas-zebra.exe entrega/etiquetas-zebra-windows.exe
           cp artefactos/etiquetas-zebra-linux/etiquetas-zebra entrega/etiquetas-zebra-linux
           chmod +x entrega/etiquetas-zebra-linux
+          cp instalar-linux.sh entrega/instalar-linux.sh
+          cp docs/img/icono.png entrega/icono.png
           ls -l entrega
 
       - name: Publicar el release
@@ -75,9 +77,16 @@ jobs:
           - **Windows**: `etiquetas-zebra-windows.exe` — se ejecuta directo, no requiere instalar nada.
           - **Linux**: `etiquetas-zebra-linux` — dar permiso de ejecucion con `chmod +x` y correr.
 
+          Para que aparezca en el menu de aplicaciones de Linux, bajar tambien
+          `instalar-linux.sh` e `icono.png` a la misma carpeta y correr:
+
+              chmod +x instalar-linux.sh && ./instalar-linux.sh
+
           La calibracion se guarda en un `config.json` junto al ejecutable, asi que conviene
           dejarlo en una carpeta con permiso de escritura.
           NOTAS
           )" \
             entrega/etiquetas-zebra-windows.exe \
-            entrega/etiquetas-zebra-linux
+            entrega/etiquetas-zebra-linux \
+            entrega/instalar-linux.sh \
+            entrega/icono.png

@@ -87,6 +87,24 @@ En Linux hay que darle permiso de ejecucion:
     chmod +x etiquetas-zebra-linux
     ./etiquetas-zebra-linux
 
+### Lanzador en el menu de aplicaciones (Linux)
+
+Para no tener que ir a la carpeta cada vez:
+
+    chmod +x instalar-linux.sh
+    ./instalar-linux.sh
+
+Copia el ejecutable a `~/.local/share/etiquetas-zebra/`, instala el icono y crea
+la entrada del menu. No pide sudo: todo queda en el home. Busca el ejecutable
+junto al script o en `~/Descargas`; tambien se le puede pasar la ruta.
+
+Para sacarlo:
+
+    ./instalar-linux.sh --desinstalar
+
+El ejecutable se instala en su propia carpeta a proposito, porque el
+`config.json` se guarda al lado del binario.
+
 Cada tag `vX.Y.Z` que se empuja dispara la compilacion y publica un release nuevo.
 
 ## Desarrollo
