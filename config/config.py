@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Calibracion del rollo, persistida en config.json junto al ejecutable."""
 
+import copy
 import json
 import os
 import sys
