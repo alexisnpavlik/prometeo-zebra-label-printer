@@ -32,7 +32,7 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install pyinstaller
-      - run: pyinstaller --onefile --windowed --name etiquetas-zebra main.py
+      - run: pyinstaller --onefile --windowed --icon docs/img/icono.ico --name etiquetas-zebra main.py
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.nombre }}

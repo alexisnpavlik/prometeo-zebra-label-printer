@@ -19,8 +19,10 @@ simbologia correcta y la calibracion del rollo.
 
 Claro y oscuro, en **Configuracion → Tema**. Se guarda en `config.json`.
 
-El logo va embebido en base64 dentro de `modules/branding.py`: Tk 8.6 lee PNG de
-forma nativa, asi que no hace falta Pillow ni `--add-data` en PyInstaller.
+El logo y el icono van embebidos en base64 dentro de `modules/branding.py`: Tk 8.6
+lee PNG de forma nativa, asi que no hace falta Pillow ni `--add-data` en PyInstaller.
+El icono de ventana y barra de tareas es la llama de Prometeo (`docs/img/icono.ico`
+para el ejecutable de Windows).
 
 ## Uso
 

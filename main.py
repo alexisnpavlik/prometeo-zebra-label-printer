@@ -30,6 +30,7 @@ class Aplicacion(tk.Tk):
         self.title(TITULO)
         self.resizable(False, False)
         self.calibracion = config.cargar()
+        self._poner_icono()
         self.estilo = ttk.Style(self)
         self._preparar_fuentes()
         self._aplicar_tema(self.calibracion.get("tema", "claro"))
@@ -38,6 +39,15 @@ class Aplicacion(tk.Tk):
         self._refrescar_impresoras()
         if not config.config_escribible():
             self._estado("La configuracion no se puede guardar en este directorio", True)
+
+    def _poner_icono(self):
+        """Pone la llama de Prometeo como icono de ventana y de barra de tareas.
+
+        Se guarda la referencia en el objeto porque Tk no retiene la imagen y el
+        icono desapareceria al pasar el recolector.
+        """
+        self.icono = tk.PhotoImage(data=branding.marca())
+        self.iconphoto(True, self.icono)
 
     # ------------------------------------------------------------------ tema
 
