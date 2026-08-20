@@ -43,11 +43,12 @@ class Aplicacion(tk.Tk):
     def _poner_icono(self):
         """Pone la llama de Prometeo como icono de ventana y de barra de tareas.
 
-        Se guarda la referencia en el objeto porque Tk no retiene la imagen y el
+        Se entregan varios tamanos para que el escritorio elija sin reescalar. Las
+        referencias quedan en el objeto porque Tk no retiene las imagenes y el
         icono desapareceria al pasar el recolector.
         """
-        self.icono = tk.PhotoImage(data=branding.marca())
-        self.iconphoto(True, self.icono)
+        self.iconos = [tk.PhotoImage(data=png) for png in branding.marcas()]
+        self.iconphoto(True, *self.iconos)
 
     # ------------------------------------------------------------------ tema
 
