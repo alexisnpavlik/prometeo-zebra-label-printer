@@ -26,9 +26,14 @@ para el ejecutable de Windows).
 
 ## Uso
 
-1. Elegir la impresora.
+1. Elegir la impresora. La lista muestra el estado de cada una: `conectada` o
+   `sin conexion`. Es el estado de la **cola** de impresion, no de la conexion
+   fisica: una cola puede figurar conectada con la impresora apagada hasta que
+   falla un trabajo. La app preselecciona la ultima usada, salvo que se sepa que
+   esta sin conexion.
 2. Cargar el TXT de Odoo (o escribir los campos a mano).
-3. Ajustar el nombre si hace falta y marcar o desmarcar el precio.
+3. Ajustar el nombre si hace falta. El precio arranca **destildado** y no se
+   tilda solo al cargar un archivo: hay que marcarlo cuando se lo quiere imprimir.
 4. Elegir cuantas filas imprimir. Cada fila son 3 etiquetas.
 
 La app recuerda la ultima impresora usada en `config.json`. La primera vez

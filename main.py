@@ -297,7 +297,7 @@ class Aplicacion(tk.Tk):
         self.codigo.bind("<KeyRelease>", lambda _evento: self._actualizar_simbologia())
         self.precio = ttk.Entry(marco, width=16, font=self.fuente_normal)
         self.precio.grid(row=fila, column=1, sticky="w", padx=(12, 0))
-        self.con_precio = tk.BooleanVar(value=True)
+        self.con_precio = tk.BooleanVar(value=False)
         ttk.Checkbutton(
             marco, text="Imprimir con precio", variable=self.con_precio
         ).grid(row=fila, column=2, sticky="w", padx=(12, 0))
@@ -376,21 +376,48 @@ class Aplicacion(tk.Tk):
     # -------------------------------------------------------------- acciones
 
     def _refrescar_impresoras(self):
-        """Recarga la lista de impresoras del sistema."""
+        """Recarga la lista de impresoras del sistema, con su estado de conexion."""
         disponibles = printers.listar()
-        self.impresora["values"] = disponibles
-        if disponibles:
-            recordada = self.calibracion.get("impresora", "")
-            if recordada and recordada in disponibles:
-                self.impresora.set(recordada)
-            else:
-                preferida = [n for n in disponibles if "GC420" in n or "ZTC" in n]
-                self.impresora.set(preferida[0] if preferida else disponibles[0])
-            self.boton_imprimir.state(["!disabled"])
-        else:
+        conectadas = printers.estado()
+
+        self.nombre_por_texto = {}
+        textos = []
+        for impresora in disponibles:
+            texto = self._texto_impresora(impresora, conectadas.get(impresora))
+            self.nombre_por_texto[texto] = impresora
+            textos.append(texto)
+        self.impresora["values"] = textos
+
+        if not disponibles:
             self.impresora.set("")
             self.boton_imprimir.state(["disabled"])
             self._estado("No se encontro ninguna impresora", True)
+            return
+
+        self.impresora.set(self._elegir_impresora(disponibles, conectadas, textos))
+        self.boton_imprimir.state(["!disabled"])
+
+    def _texto_impresora(self, impresora, conectada):
+        """Arma como se ve una impresora en la lista, con su estado."""
+        if conectada is None:
+            return impresora
+        return "{}  ·  {}".format(impresora, "conectada" if conectada else "sin conexion")
+
+    def _elegir_impresora(self, disponibles, conectadas, textos):
+        """Elige que impresora preseleccionar: la recordada, o una conectada."""
+        recordada = self.calibracion.get("impresora", "")
+        # la recordada gana, salvo que se sepa que esta sin conexion
+        if recordada in disponibles and conectadas.get(recordada, True):
+            return self._texto_impresora(recordada, conectadas.get(recordada))
+        candidatas = [n for n in disponibles if conectadas.get(n)] or disponibles
+        preferida = [n for n in candidatas if "GC420" in n or "ZTC" in n]
+        elegida = preferida[0] if preferida else candidatas[0]
+        return self._texto_impresora(elegida, conectadas.get(elegida))
+
+    def _impresora_elegida(self):
+        """Devuelve el nombre real de la impresora seleccionada, sin el estado."""
+        texto = self.impresora.get()
+        return self.nombre_por_texto.get(texto, texto)
 
     def _cargar_txt(self):
         """Abre un TXT de Odoo y completa los campos."""
@@ -423,7 +450,6 @@ class Aplicacion(tk.Tk):
         self.codigo.insert(0, datos["codigo"])
         self.precio.delete(0, tk.END)
         self.precio.insert(0, datos["precio"] or "")
-        self.con_precio.set(bool(datos["precio"]))
         self._actualizar_simbologia()
 
     def _actualizar_simbologia(self):
@@ -486,7 +512,7 @@ class Aplicacion(tk.Tk):
 
     def _enviar(self, datos):
         """Envia los datos crudos. Devuelve True si salio, False si fallo."""
-        impresora = self.impresora.get()
+        impresora = self._impresora_elegida()
         try:
             printers.imprimir_raw(impresora, datos)
         except (printers.ErrorImpresion, ValueError) as error:

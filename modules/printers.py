@@ -90,6 +90,25 @@ def _listar_linux():
     return [linea.strip() for linea in salida.splitlines() if linea.strip()]
 
 
+def _estado_linux():
+    """Devuelve {nombre: conectada} leyendo el estado de las colas de CUPS.
+
+    CUPS reporta el estado de la COLA, no la conexion fisica: una cola puede
+    figurar habilitada con la impresora apagada hasta que un trabajo falla. Es
+    lo mas cercano que hay sin hablarle al dispositivo.
+    """
+    try:
+        salida = subprocess.check_output(["lpstat", "-p"], universal_newlines=True)
+    except (OSError, subprocess.CalledProcessError):
+        return {}
+    estados = {}
+    for linea in salida.splitlines():
+        partes = linea.split()
+        if len(partes) >= 3 and partes[0] == "printer":
+            estados[partes[1]] = "disabled" not in partes[2]
+    return estados
+
+
 def _listar_windows():
     """Nombres de impresora segun winspool. Lanza ErrorImpresion si algo falla de verdad."""
     import ctypes
@@ -133,6 +152,95 @@ def _listar_windows():
 
     info = ctypes.cast(buffer, ctypes.POINTER(PRINTER_INFO_4))
     return [info[i].pPrinterName for i in range(devueltos.value)]
+
+
+def _estado_windows():
+    """Devuelve {nombre: conectada} segun el Status de winspool.
+
+    Sin verificar contra Windows real: ante cualquier problema devuelve {} y la
+    interfaz muestra las impresoras sin estado, que es preferible a mentir.
+    """
+    import ctypes
+    from ctypes import wintypes
+
+    ERROR_INSUFFICIENT_BUFFER = 122
+    PRINTER_STATUS_OFFLINE = 0x00000080
+    PRINTER_STATUS_NOT_AVAILABLE = 0x00001000
+    PRINTER_STATUS_ERROR = 0x00000002
+    PRINTER_ATTRIBUTE_WORK_OFFLINE = 0x00000400
+
+    class PRINTER_INFO_2(ctypes.Structure):
+        _fields_ = [
+            ("pServerName", wintypes.LPWSTR),
+            ("pPrinterName", wintypes.LPWSTR),
+            ("pShareName", wintypes.LPWSTR),
+            ("pPortName", wintypes.LPWSTR),
+            ("pDriverName", wintypes.LPWSTR),
+            ("pComment", wintypes.LPWSTR),
+            ("pLocation", wintypes.LPWSTR),
+            ("pDevMode", ctypes.c_void_p),
+            ("pSepFile", wintypes.LPWSTR),
+            ("pPrintProcessor", wintypes.LPWSTR),
+            ("pDatatype", wintypes.LPWSTR),
+            ("pParameters", wintypes.LPWSTR),
+            ("pSecurityDescriptor", ctypes.c_void_p),
+            ("Attributes", wintypes.DWORD),
+            ("Priority", wintypes.DWORD),
+            ("DefaultPriority", wintypes.DWORD),
+            ("StartTime", wintypes.DWORD),
+            ("UntilTime", wintypes.DWORD),
+            ("Status", wintypes.DWORD),
+            ("cJobs", wintypes.DWORD),
+            ("AveragePPM", wintypes.DWORD),
+        ]
+
+    winspool = _winspool()
+    necesarios = wintypes.DWORD(0)
+    devueltos = wintypes.DWORD(0)
+    banderas = 2 | 4  # LOCAL | CONNECTIONS
+
+    ctypes.set_last_error(0)
+    if not winspool.EnumPrintersW(
+        banderas, None, 2, None, 0, ctypes.byref(necesarios), ctypes.byref(devueltos)
+    ):
+        if ctypes.get_last_error() != ERROR_INSUFFICIENT_BUFFER:
+            return {}
+    if necesarios.value == 0:
+        return {}
+
+    buffer = ctypes.create_string_buffer(necesarios.value)
+    if not winspool.EnumPrintersW(
+        banderas, None, 2, buffer, necesarios.value,
+        ctypes.byref(necesarios), ctypes.byref(devueltos),
+    ):
+        return {}
+
+    apagada = (
+        PRINTER_STATUS_OFFLINE | PRINTER_STATUS_NOT_AVAILABLE | PRINTER_STATUS_ERROR
+    )
+    info = ctypes.cast(buffer, ctypes.POINTER(PRINTER_INFO_2))
+    estados = {}
+    for indice in range(devueltos.value):
+        entrada = info[indice]
+        fuera_de_linea = bool(entrada.Status & apagada) or bool(
+            entrada.Attributes & PRINTER_ATTRIBUTE_WORK_OFFLINE
+        )
+        estados[entrada.pPrinterName] = not fuera_de_linea
+    return estados
+
+
+def estado():
+    """Devuelve {nombre: True/False} con que impresoras estan disponibles.
+
+    Una impresora que no aparezca en el diccionario tiene estado desconocido.
+    Nunca lanza: si el estado no se puede averiguar, devuelve {}.
+    """
+    try:
+        if _es_windows():
+            return _estado_windows()
+        return _estado_linux()
+    except Exception:
+        return {}
 
 
 def listar():
