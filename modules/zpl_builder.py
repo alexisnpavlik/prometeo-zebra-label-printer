@@ -9,6 +9,18 @@ tres columnas dibujadas en sus offsets, y no tres ^XA separados.
 from modules import barcodes
 
 
+def _escapar(texto):
+    """Escapa los prefijos de comando ZPL dentro de un campo ^FD.
+
+    El firmware corta el campo ^FD en cuanto ve ^ o ~, sean parte del texto o
+    no: con un nombre como "PINTURA 3^4" el campo termina en "PINTURA 3" y
+    "^4" se interpreta como comando desconocido, arrastrando el resto de la
+    columna. ^FH\\ antes del campo habilita las secuencias _XX (hex de 2
+    digitos); reemplazando ^ por _5E y ~ por _7E el dato sale literal.
+    """
+    return texto.replace("^", "_5E").replace("~", "_7E")
+
+
 def _columna(x, nombre, precio, codigo, calibracion):
     """Devuelve el bloque ZPL de una columna con offset horizontal x."""
     margen = calibracion["margen"]
@@ -16,11 +28,15 @@ def _columna(x, nombre, precio, codigo, calibracion):
     comando, modulo = barcodes.elegir_barcode(codigo, util)
 
     bloque = [
-        "^FO{},10^A0N,13,8^FB{},2,0,C,0^FD{}^FS".format(x + margen, util, nombre)
+        "^FO{},10^A0N,13,8^FB{},2,0,C,0^FH\\^FD{}^FS".format(
+            x + margen, util, _escapar(nombre)
+        )
     ]
     if precio:
         bloque.append(
-            "^FO{},48^A0N,24,16^FB{},1,0,C,0^FD{}^FS".format(x + margen, util, precio)
+            "^FO{},48^A0N,24,16^FB{},1,0,C,0^FH\\^FD{}^FS".format(
+                x + margen, util, _escapar(precio)
+            )
         )
         y_barcode = 84
     else:
@@ -28,13 +44,13 @@ def _columna(x, nombre, precio, codigo, calibracion):
 
     argumentos = ",N,N" if comando in ("^BEN", "^BUN", "^B8N") else ",N,N,N"
     bloque.append(
-        "^FO{},{}^BY{}{},40{}^FD{}^FS".format(
-            x + margen, y_barcode, modulo, comando, argumentos, codigo
+        "^FO{},{}^BY{}{},40{}^FH\\^FD{}^FS".format(
+            x + margen, y_barcode, modulo, comando, argumentos, _escapar(codigo)
         )
     )
     bloque.append(
-        "^FO{},{}^A0N,14,9^FB{},1,0,C,0^FD{}^FS".format(
-            x + margen, y_barcode + 44, util, codigo
+        "^FO{},{}^A0N,14,9^FB{},1,0,C,0^FH\\^FD{}^FS".format(
+            x + margen, y_barcode + 44, util, _escapar(codigo)
         )
     )
     return "".join(bloque)

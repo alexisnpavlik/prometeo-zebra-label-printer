@@ -6,6 +6,8 @@ El buffer se limpia con N y se imprime con P1. La oscuridad es absoluta (D0-D15)
 no relativa como el ^MD de ZPL.
 """
 
+import textwrap
+
 from modules import barcodes
 
 TIPOS_EPL = {
@@ -17,6 +19,7 @@ TIPOS_EPL = {
 
 GAP = 24          # separacion entre filas de etiquetas, en dots
 FUENTE = "2"      # fuente EPL de tamano fijo
+ANCHO_CARACTER_FUENTE_2 = 10  # dots por caracter, fuente 2 con multiplicador 1
 ALTO_BARRAS = 40
 
 
@@ -24,9 +27,14 @@ def _escapar(texto):
     """Escapa comillas dobles dentro de campos de texto EPL2.
 
     Solo se escapa la comilla doble con \", que es el escape documentado por EPL2.
-    La barra invertida no se toca: EPL2 no define \\ como escape.
+    La barra invertida no se toca: EPL2 no define \\ como escape. Pero una barra
+    invertida al final del texto quedaria pegada a la comilla de cierre del
+    campo, "escapandola" sin querer y dejando el string sin cerrar; se descarta.
     """
-    return texto.replace('"', '\\"')
+    texto = texto.replace('"', '\\"')
+    if texto.endswith("\\"):
+        texto = texto.rstrip("\\")
+    return texto
 
 
 def _oscuridad_epl(oscuridad_zpl):
@@ -39,13 +47,29 @@ def _oscuridad_epl(oscuridad_zpl):
     return max(0, min(15, 15 + oscuridad_zpl - 1))
 
 
+def _partir_nombre(nombre, ancho_util):
+    """Envuelve el nombre en hasta 2 lineas que entren en ancho_util.
+
+    EPL2 no tiene equivalente al ^FB de ZPL (envolvimiento automatico dentro
+    de un bloque), asi que hay que partirlo a mano. La fuente 2 mide
+    ANCHO_CARACTER_FUENTE_2 dots por caracter con multiplicador 1. Corta por
+    palabras cuando se puede; lo que no entra en 2 lineas se descarta.
+    """
+    max_caracteres = max(1, ancho_util // ANCHO_CARACTER_FUENTE_2)
+    lineas = textwrap.wrap(nombre, width=max_caracteres, break_long_words=True)
+    return lineas[:2]
+
+
 def _columna(x, nombre, precio, codigo, calibracion):
     """Devuelve las lineas EPL de una columna con offset horizontal x."""
     margen = calibracion["margen"]
     comando, modulo = barcodes.elegir_barcode(codigo, calibracion["util"])
     tipo = TIPOS_EPL[comando]
 
-    lineas = ['A{},10,0,{},1,1,N,"{}"'.format(x + margen, FUENTE, _escapar(nombre))]
+    lineas = [
+        'A{},{},0,{},1,1,N,"{}"'.format(x + margen, y, FUENTE, _escapar(linea_nombre))
+        for y, linea_nombre in zip((6, 24), _partir_nombre(nombre, calibracion["util"]))
+    ]
     if precio:
         lineas.append(
             'A{},48,0,{},2,2,N,"{}"'.format(x + margen, FUENTE, _escapar(precio))
@@ -55,12 +79,12 @@ def _columna(x, nombre, precio, codigo, calibracion):
         y_barcode = 60
 
     lineas.append(
-        'B{},{},0,"{}",{},{},{},N,"{}"'.format(
-            x + margen, y_barcode, tipo, modulo, modulo * 2, ALTO_BARRAS, codigo
+        'B{},{},0,{},{},{},{},N,"{}"'.format(
+            x + margen, y_barcode, tipo, modulo, modulo * 2, ALTO_BARRAS, _escapar(codigo)
         )
     )
     lineas.append(
-        'A{},{},0,1,1,1,N,"{}"'.format(x + margen, y_barcode + 44, codigo)
+        'A{},{},0,1,1,1,N,"{}"'.format(x + margen, y_barcode + 44, _escapar(codigo))
     )
     return lineas
 

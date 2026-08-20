@@ -39,6 +39,11 @@ instalacion se llama `ZTC-GC420t--EPL--2` y sin embargo acepta ZPL.
 
 Si las etiquetas salen en blanco o con texto crudo, el lenguaje esta al reves.
 
+El generador EPL2 nunca se probo contra una impresora real. Ademas no declara
+charset: ZPL emite `^CI28` (UTF-8), pero EPL2 no tiene un comando equivalente
+en uso aca, asi que los acentos y la ñ pueden salir mal en esa impresora.
+Verificar una impresion de prueba antes de usarlo en produccion.
+
 ## Calibracion
 
 En **Configuracion → Calibracion**. Se toca solo al cambiar de rollo.

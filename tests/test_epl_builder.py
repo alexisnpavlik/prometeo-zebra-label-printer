@@ -24,15 +24,21 @@ class TestEtiqueta(unittest.TestCase):
 
     def test_usa_e30_para_un_ean13(self):
         epl = epl_builder.etiqueta("ANAFE", None, "7794824658488", CAL)
-        self.assertIn('"E30"', epl)
+        lineas_b = [l for l in epl.splitlines() if l.startswith("B")]
+        self.assertTrue(any(",E30," in l for l in lineas_b))
+        self.assertIn('"7794824658488"', epl)
 
     def test_usa_ua0_para_un_upca(self):
         epl = epl_builder.etiqueta("SCUNCI", None, "677870568079", CAL)
-        self.assertIn('"UA0"', epl)
+        lineas_b = [l for l in epl.splitlines() if l.startswith("B")]
+        self.assertTrue(any(",UA0," in l for l in lineas_b))
+        self.assertIn('"677870568079"', epl)
 
     def test_usa_code128_para_un_codigo_interno(self):
         epl = epl_builder.etiqueta("INTERNO", None, "123456", CAL)
-        self.assertIn('"1"', epl)
+        lineas_b = [l for l in epl.splitlines() if l.startswith("B")]
+        self.assertTrue(any(",1," in l for l in lineas_b))
+        self.assertIn('"123456"', epl)
 
     def test_dibuja_las_tres_columnas(self):
         epl = epl_builder.etiqueta("ANAFE", None, "7794824658488", CAL)
@@ -86,6 +92,69 @@ class TestMismaInterfazQueZpl(unittest.TestCase):
         for nombre in ("etiqueta", "filas", "regla"):
             self.assertTrue(hasattr(epl_builder, nombre))
             self.assertTrue(hasattr(zpl_builder, nombre))
+
+    def test_generan_columnas_equivalentes(self):
+        """Compara propiedades de una columna, no el texto crudo de cada lenguaje.
+
+        Ambos generadores deben elegir la misma simbologia, repetir nombre,
+        precio y codigo una vez por columna, y nunca exceder el ancho util
+        con el nombre. Este ultimo chequeo es el que habria detectado que
+        EPL invadia la columna vecina al no envolver el nombre.
+        """
+        from modules import zpl_builder, barcodes
+
+        casos = [
+            ("ANAFE", "$41.000,00", "7794824658488"),
+            ("SCUNCI DE TELA ESTAMPA LETRAS (CV)", None, "677870568079"),
+            (
+                "PILA ALCALINA AA CHICA PACK DOCE UNIDADES SURTIDAS",
+                "$1.234,00",
+                "123456",
+            ),
+        ]
+        for nombre, precio, codigo in casos:
+            with self.subTest(codigo=codigo):
+                x = CAL["offsets"][0]
+                comando_zpl, _ = barcodes.elegir_barcode(codigo, CAL["util"])
+                tipo_epl_esperado = epl_builder.TIPOS_EPL[comando_zpl]
+
+                bloque_zpl = zpl_builder._columna(x, nombre, precio, codigo, CAL)
+                lineas_epl = epl_builder._columna(x, nombre, precio, codigo, CAL)
+                bloque_epl = "\n".join(lineas_epl)
+
+                # misma simbologia elegida en los dos
+                self.assertIn(comando_zpl, bloque_zpl)
+                lineas_b_epl = [l for l in lineas_epl if l.startswith("B")]
+                self.assertTrue(
+                    any(",{},".format(tipo_epl_esperado) in l for l in lineas_b_epl)
+                )
+
+                # el codigo se emite (barcode + texto legible), en los dos
+                self.assertEqual(bloque_zpl.count(codigo), 2)
+                self.assertEqual(bloque_epl.count(codigo), 2)
+
+                # el precio se emite una vez en la columna, en los dos
+                if precio:
+                    self.assertEqual(bloque_zpl.count(precio), 1)
+                    self.assertEqual(bloque_epl.count(precio), 1)
+
+                # el nombre completo esta presente: ZPL lo envuelve via ^FB en el
+                # firmware, asi que viaja entero; EPL lo parte a mano en hasta 2
+                # lineas propias.
+                self.assertIn(nombre, bloque_zpl)
+                lineas_nombre_epl = [
+                    l.split('"')[1]
+                    for l in lineas_epl
+                    if l.startswith("A") and (",6,0," in l or ",24,0," in l)
+                ]
+                self.assertGreater(len(lineas_nombre_epl), 0)
+                self.assertLessEqual(len(lineas_nombre_epl), 2)
+
+                # ningun texto de nombre en EPL excede el ancho util de la columna
+                for linea in lineas_nombre_epl:
+                    self.assertLessEqual(
+                        len(linea) * epl_builder.ANCHO_CARACTER_FUENTE_2, CAL["util"]
+                    )
 
 
 if __name__ == "__main__":

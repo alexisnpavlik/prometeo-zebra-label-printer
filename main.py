@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 """GUI para imprimir etiquetas de producto en la Zebra con rollo 3-across."""
 
+import os
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
@@ -125,7 +126,7 @@ class Aplicacion(tk.Tk):
                 "{}\n\nCargá los campos a mano.".format(error),
             )
             return
-        self.archivo.config(text=ruta.split("/")[-1], foreground="black")
+        self.archivo.config(text=os.path.basename(ruta), foreground="black")
         self._completar(datos)
 
     def _completar(self, datos):
@@ -174,8 +175,15 @@ class Aplicacion(tk.Tk):
             messagebox.showerror("Falta el codigo", "Cargá el codigo del producto.")
             return
         try:
+            cantidad = self.filas.get()
+        except tk.TclError:
+            messagebox.showerror(
+                "Cantidad invalida", "Cargá una cantidad de filas valida."
+            )
+            return
+        try:
             etiqueta = self._generador().filas(
-                nombre, precio, codigo, self.calibracion, self.filas.get()
+                nombre, precio, codigo, self.calibracion, cantidad
             )
         except ValueError as error:
             messagebox.showerror("No se puede imprimir", str(error))
