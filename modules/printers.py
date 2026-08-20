@@ -13,31 +13,89 @@ class ErrorImpresion(Exception):
     """Fallo al enviar el trabajo a la impresora."""
 
 
+# Motivo de la ultima falla real de listar() en Windows (no se expone en el
+# contrato de listar(), que siempre devuelve una lista; sirve para diagnostico
+# remoto cuando "no hay impresoras" en realidad era un error del sistema).
+ultimo_error_listado = None
+
+# Cache del WinDLL de winspool, para no recargarlo ni redeclarar argtypes en
+# cada llamada. Se crea perezosamente porque WinDLL no existe fuera de Windows.
+_winspool_dll = None
+
+
 def _es_windows():
     """True si corre sobre Windows."""
     return sys.platform.startswith("win")
 
 
+def _winspool():
+    """Devuelve el WinDLL de winspool.drv, cacheado, con codigos de error del sistema."""
+    global _winspool_dll
+    if _winspool_dll is None:
+        import ctypes
+        from ctypes import wintypes
+
+        dll = ctypes.WinDLL("winspool.drv", use_last_error=True)
+
+        dll.OpenPrinterW.argtypes = [
+            wintypes.LPWSTR,
+            ctypes.POINTER(wintypes.HANDLE),
+            wintypes.LPVOID,
+        ]
+        dll.OpenPrinterW.restype = wintypes.BOOL
+
+        dll.WritePrinter.argtypes = [
+            wintypes.HANDLE,
+            wintypes.LPVOID,
+            wintypes.DWORD,
+            ctypes.POINTER(wintypes.DWORD),
+        ]
+        dll.WritePrinter.restype = wintypes.BOOL
+
+        dll.StartDocPrinterW.argtypes = [
+            wintypes.HANDLE,
+            wintypes.DWORD,
+            wintypes.LPVOID,
+        ]
+        dll.StartDocPrinterW.restype = wintypes.DWORD
+
+        dll.EnumPrintersW.argtypes = [
+            wintypes.DWORD,
+            wintypes.LPWSTR,
+            wintypes.DWORD,
+            wintypes.LPVOID,
+            wintypes.DWORD,
+            ctypes.POINTER(wintypes.DWORD),
+            ctypes.POINTER(wintypes.DWORD),
+        ]
+        dll.EnumPrintersW.restype = wintypes.BOOL
+
+        _winspool_dll = dll
+    return _winspool_dll
+
+
+def _error_sistema_windows():
+    """Mensaje de error del sistema (FormatMessage) para la ultima falla de winspool."""
+    import ctypes
+
+    return str(ctypes.WinError(ctypes.get_last_error()))
+
+
 def _listar_linux():
     """Nombres de impresora segun CUPS."""
     try:
-        salida = subprocess.check_output(["lpstat", "-a"], universal_newlines=True)
+        salida = subprocess.check_output(["lpstat", "-e"], universal_newlines=True)
     except (OSError, subprocess.CalledProcessError):
         return []
-    nombres = []
-    for linea in salida.splitlines():
-        partes = linea.split()
-        if len(partes) >= 2 and partes[0] == "printer":
-            nombres.append(partes[1])
-        elif partes:
-            nombres.append(partes[0])
-    return nombres
+    return [linea.strip() for linea in salida.splitlines() if linea.strip()]
 
 
 def _listar_windows():
-    """Nombres de impresora segun winspool."""
+    """Nombres de impresora segun winspool. Lanza ErrorImpresion si algo falla de verdad."""
     import ctypes
     from ctypes import wintypes
+
+    ERROR_INSUFFICIENT_BUFFER = 122
 
     class PRINTER_INFO_4(ctypes.Structure):
         _fields_ = [
@@ -46,14 +104,18 @@ def _listar_windows():
             ("Attributes", wintypes.DWORD),
         ]
 
-    winspool = ctypes.WinDLL("winspool.drv")
+    winspool = _winspool()
     necesarios = wintypes.DWORD(0)
     devueltos = wintypes.DWORD(0)
     banderas = 2 | 4  # LOCAL | CONNECTIONS
 
-    winspool.EnumPrintersW(
+    ctypes.set_last_error(0)
+    if not winspool.EnumPrintersW(
         banderas, None, 4, None, 0, ctypes.byref(necesarios), ctypes.byref(devueltos)
-    )
+    ):
+        codigo = ctypes.get_last_error()
+        if codigo != ERROR_INSUFFICIENT_BUFFER:
+            raise ErrorImpresion(_error_sistema_windows())
     if necesarios.value == 0:
         return []
 
@@ -67,7 +129,7 @@ def _listar_windows():
         ctypes.byref(necesarios),
         ctypes.byref(devueltos),
     ):
-        return []
+        raise ErrorImpresion(_error_sistema_windows())
 
     info = ctypes.cast(buffer, ctypes.POINTER(PRINTER_INFO_4))
     return [info[i].pPrinterName for i in range(devueltos.value)]
@@ -75,11 +137,19 @@ def _listar_windows():
 
 def listar():
     """Devuelve los nombres de impresora disponibles en el sistema."""
+    global ultimo_error_listado
     if _es_windows():
         try:
-            return _listar_windows()
-        except Exception:
+            resultado = _listar_windows()
+        except Exception as error:
+            ultimo_error_listado = str(error)
+            print(
+                "printers: fallo al listar impresoras: {0}".format(error),
+                file=sys.stderr,
+            )
             return []
+        ultimo_error_listado = None
+        return resultado
     return _listar_linux()
 
 
@@ -107,27 +177,40 @@ def _imprimir_windows(impresora, datos):
             ("pDatatype", wintypes.LPWSTR),
         ]
 
-    winspool = ctypes.WinDLL("winspool.drv")
+    winspool = _winspool()
     handle = wintypes.HANDLE()
     if not winspool.OpenPrinterW(impresora, ctypes.byref(handle), None):
-        raise ErrorImpresion("no se pudo abrir la impresora {!r}".format(impresora))
+        raise ErrorImpresion(_error_sistema_windows())
 
+    trabajo_iniciado = False
     try:
         documento = DOC_INFO_1("Etiquetas ZPL", None, "RAW")
         if not winspool.StartDocPrinterW(handle, 1, ctypes.byref(documento)):
-            raise ErrorImpresion("no se pudo iniciar el trabajo de impresion")
-        try:
-            if not winspool.StartPagePrinter(handle):
-                raise ErrorImpresion("no se pudo iniciar la pagina")
-            crudo = datos.encode("utf-8")
-            escritos = wintypes.DWORD(0)
-            if not winspool.WritePrinter(
-                handle, crudo, len(crudo), ctypes.byref(escritos)
-            ):
-                raise ErrorImpresion("fallo el envio de datos a la impresora")
-            winspool.EndPagePrinter(handle)
-        finally:
-            winspool.EndDocPrinter(handle)
+            raise ErrorImpresion(_error_sistema_windows())
+        trabajo_iniciado = True
+
+        if not winspool.StartPagePrinter(handle):
+            raise ErrorImpresion(_error_sistema_windows())
+
+        crudo = datos.encode("utf-8")
+        escritos = wintypes.DWORD(0)
+        if not winspool.WritePrinter(
+            handle, crudo, len(crudo), ctypes.byref(escritos)
+        ):
+            raise ErrorImpresion(_error_sistema_windows())
+        if escritos.value != len(crudo):
+            raise ErrorImpresion(
+                "escritura incompleta: {0} de {1} bytes enviados".format(
+                    escritos.value, len(crudo)
+                )
+            )
+
+        winspool.EndPagePrinter(handle)
+        winspool.EndDocPrinter(handle)
+    except Exception:
+        if trabajo_iniciado:
+            winspool.AbortPrinter(handle)
+        raise
     finally:
         winspool.ClosePrinter(handle)
 

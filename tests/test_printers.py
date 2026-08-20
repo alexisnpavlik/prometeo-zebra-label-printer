@@ -7,7 +7,7 @@ from modules import printers
 
 class TestListarLinux(unittest.TestCase):
     def test_parsea_la_salida_de_lpstat(self):
-        salida = "printer QL-800 disabled since ayer\nprinter ZTC-GC420t idle\n"
+        salida = "QL-800\nZTC-GC420t\n"
         with mock.patch.object(printers, "_es_windows", return_value=False):
             with mock.patch.object(printers.subprocess, "check_output", return_value=salida):
                 self.assertEqual(printers.listar(), ["QL-800", "ZTC-GC420t"])
@@ -16,6 +16,17 @@ class TestListarLinux(unittest.TestCase):
         with mock.patch.object(printers, "_es_windows", return_value=False):
             with mock.patch.object(printers.subprocess, "check_output", side_effect=OSError):
                 self.assertEqual(printers.listar(), [])
+
+
+class TestListarWindowsManejoDeErrores(unittest.TestCase):
+    def test_error_real_no_se_confunde_con_lista_vacia(self):
+        with mock.patch.object(printers, "_es_windows", return_value=True):
+            with mock.patch.object(
+                printers, "_listar_windows", side_effect=printers.ErrorImpresion("boom")
+            ):
+                resultado = printers.listar()
+        self.assertEqual(resultado, [])
+        self.assertIn("boom", printers.ultimo_error_listado)
 
 
 class TestImprimirLinux(unittest.TestCase):
