@@ -51,6 +51,12 @@ class TestEtiqueta(unittest.TestCase):
         epl = epl_builder.etiqueta('ANAFE "O.F"', None, "7794824658488", CAL)
         self.assertIn('\\"O.F\\"', epl)
 
+    def test_barra_invertida_no_se_duplica(self):
+        epl = epl_builder.etiqueta("ANAFE\\OTRA", None, "7794824658488", CAL)
+        # La barra invertida no es escape en EPL2, debe sobrevivir tal cual
+        self.assertIn('ANAFE\\OTRA', epl)
+        self.assertNotIn('ANAFE\\\\OTRA', epl)
+
     def test_codigo_invalido_propaga_el_error(self):
         with self.assertRaises(ValueError):
             epl_builder.etiqueta("X", None, "A" * 60, CAL)

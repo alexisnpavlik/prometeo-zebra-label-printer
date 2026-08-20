@@ -30,7 +30,12 @@ def _escapar(texto):
 
 
 def _oscuridad_epl(oscuridad_zpl):
-    """Traduce el ^MD relativo de ZPL a la densidad absoluta D0-D15 de EPL."""
+    """Traduce el ^MD relativo de ZPL a la densidad absoluta D0-D15 de EPL.
+
+    La fórmula 15 + oscuridad_zpl - 1 mapea el -6 de ZPL a D8, que es el valor
+    calibrado para que las barras no engordan en esta impresora. El clamp
+    mantiene el resultado en 0-15 para cualquier entrada.
+    """
     return max(0, min(15, 15 + oscuridad_zpl - 1))
 
 
