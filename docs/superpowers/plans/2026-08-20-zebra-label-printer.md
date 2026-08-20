@@ -19,6 +19,9 @@
 - **Envío RAW obligatorio:** el ZPL lo interpreta el firmware, nunca un driver.
 - Calibración por defecto, medida contra el troquel real el 2026-08-20:
   `ancho_total=736`, `alto=166`, `offsets=[0, 256, 508]`, `margen=11`, `util=190`, `oscuridad=-6`.
+- **Dos lenguajes de impresora:** ZPL y EPL2. `zpl_builder` y `epl_builder` exponen la
+  misma interfaz (`etiqueta`, `filas`, `regla`) y el resto del programa elige por
+  `calibracion["lenguaje"]`, que vale `"zpl"` o `"epl"`.
 - Los tests corren con `python3 -m unittest discover -s tests -v` y no requieren impresora.
 
 ---
@@ -187,7 +190,8 @@ codigo mas ancho que la etiqueta y que no lee como codigo de producto."
 - Consumes: nada.
 - Produces:
   - `ParseError` — excepción, subclase de `Exception`.
-  - `parsear(texto: str) -> dict` — devuelve `{"nombre": str, "precio": str or None, "codigo": str}`. Lanza `ParseError` si no encuentra el código.
+  - `parsear(texto: str) -> dict` — devuelve `{"nombre": str, "precio": str or None, "codigo": str}`. Acepta entrada en ZPL o EPL2. Lanza `ParseError` si no encuentra el código.
+  - `detectar_lenguaje(texto: str) -> str` — `"zpl"` o `"epl"` según el contenido.
   - `limpiar_nombre(nombre: str) -> str` — saca el prefijo `[CODIGO]` y el sufijo `(NNNNNN)`.
 
 - [ ] **Step 1: Write the failing test**
@@ -245,6 +249,35 @@ class TestParsear(unittest.TestCase):
             zpl_parser.parsear("^XA^FT10,10^FDhola^FS^XZ")
 
 
+EPL_DE_ENTRADA = """N
+q736
+Q166,24
+A20,10,0,2,1,1,N,"[C-842B] SCUNCI DE TELA (CV)"
+A20,48,0,2,2,2,N,"$500,00"
+B20,84,0,"UA0",2,4,40,N,"677870568079"
+P1
+"""
+
+
+class TestEpl(unittest.TestCase):
+    def test_detecta_zpl(self):
+        self.assertEqual(zpl_parser.detectar_lenguaje(ODOO_CON_PRECIO), "zpl")
+
+    def test_detecta_epl(self):
+        self.assertEqual(zpl_parser.detectar_lenguaje(EPL_DE_ENTRADA), "epl")
+
+    def test_parsea_codigo_de_epl(self):
+        self.assertEqual(zpl_parser.parsear(EPL_DE_ENTRADA)["codigo"], "677870568079")
+
+    def test_parsea_precio_de_epl(self):
+        self.assertEqual(zpl_parser.parsear(EPL_DE_ENTRADA)["precio"], "$500,00")
+
+    def test_parsea_nombre_de_epl_sin_prefijo(self):
+        self.assertEqual(
+            zpl_parser.parsear(EPL_DE_ENTRADA)["nombre"], "SCUNCI DE TELA (CV)"
+        )
+
+
 class TestLimpiarNombre(unittest.TestCase):
     def test_saca_prefijo_entre_corchetes(self):
         self.assertEqual(zpl_parser.limpiar_nombre("[C-842B] SCUNCI"), "SCUNCI")
@@ -270,11 +303,12 @@ Expected: FAIL con `ImportError: cannot import name 'zpl_parser'`
 ```python
 # modules/zpl_parser.py
 # -*- coding: utf-8 -*-
-"""Extrae nombre, precio y codigo del ZPL que exporta Odoo.
+"""Extrae nombre, precio y codigo de una etiqueta en ZPL o EPL2.
 
 El reporte de Odoo asume una etiqueta mucho mas ancha que el rollo real, asi
 que no se imprime tal cual: se extraen los datos y se reconstruye la etiqueta
-con la calibracion propia.
+con la calibracion propia. El lenguaje del archivo de entrada es independiente
+del que se use para imprimir.
 """
 
 import re
@@ -301,8 +335,47 @@ def _campos(texto):
     return [(m.start(), m.group(1)) for m in re.finditer(r"\^FD(.*?)\^FS", texto, re.S)]
 
 
+def detectar_lenguaje(texto):
+    """Devuelve "zpl" o "epl" segun los comandos que aparezcan."""
+    if "^XA" in texto or "^FD" in texto:
+        return "zpl"
+    return "epl"
+
+
+def _parsear_epl(texto):
+    """Extrae los datos de una etiqueta EPL2."""
+    codigo = None
+    for linea in texto.splitlines():
+        limpia = linea.strip()
+        if limpia.startswith("B"):
+            comillas = re.findall(r'"([^"]*)"', limpia)
+            if comillas:
+                codigo = comillas[-1].strip()
+                break
+    if not codigo:
+        raise ParseError("el archivo EPL no tiene ningun comando de codigo de barras")
+
+    textos = []
+    for linea in texto.splitlines():
+        limpia = linea.strip()
+        if limpia.startswith("A"):
+            comillas = re.findall(r'"([^"]*)"', limpia)
+            if comillas:
+                textos.append(comillas[-1].strip())
+
+    precio = next((t for t in textos if t.startswith("$")), None)
+    nombre = next(
+        (limpiar_nombre(t) for t in textos if t and t != codigo and not t.startswith("$")),
+        "",
+    )
+    return {"nombre": nombre, "precio": precio, "codigo": codigo}
+
+
 def parsear(texto):
-    """Devuelve {"nombre", "precio", "codigo"} a partir del ZPL de Odoo."""
+    """Devuelve {"nombre", "precio", "codigo"} a partir de un ZPL o un EPL."""
+    if detectar_lenguaje(texto) == "epl":
+        return _parsear_epl(texto)
+
     campos = _campos(texto)
     if not campos:
         raise ParseError("el archivo no tiene campos ^FD...^FS")
@@ -342,7 +415,7 @@ def parsear(texto):
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `python3 -m unittest tests.test_zpl_parser -v`
-Expected: PASS, 9 tests
+Expected: PASS, 14 tests
 
 - [ ] **Step 5: Commit**
 
@@ -395,6 +468,9 @@ class TestConfig(unittest.TestCase):
         self.assertEqual(cal["alto"], 166)
         self.assertEqual(cal["oscuridad"], -6)
 
+    def test_el_lenguaje_por_defecto_es_zpl(self):
+        self.assertEqual(config.cargar(self.ruta)["lenguaje"], "zpl")
+
     def test_guardar_y_volver_a_cargar(self):
         cal = config.cargar(self.ruta)
         cal["offsets"] = [0, 250, 500]
@@ -443,6 +519,7 @@ CALIBRACION_DEFECTO = {
     "margen": 11,         # margen interno de cada columna
     "util": 190,          # ancho disponible para el contenido
     "oscuridad": -6,      # ^MD; sin esto las barras engordan y el EAN no lee
+    "lenguaje": "zpl",    # "zpl" o "epl"; se elige a mano, no se autodetecta
 }
 
 
@@ -490,7 +567,7 @@ def guardar(calibracion, ruta=None):
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `python3 -m unittest tests.test_config -v`
-Expected: PASS, 5 tests
+Expected: PASS, 6 tests
 
 - [ ] **Step 5: Commit**
 
@@ -684,7 +761,235 @@ git commit -m "feat: generador de ZPL 3-across con calibracion"
 
 ---
 
-### Task 5: Impresión multiplataforma
+### Task 5: Generador de EPL2
+
+**Files:**
+- Create: `modules/epl_builder.py`
+- Test: `tests/test_epl_builder.py`
+
+**Interfaces:**
+- Consumes: `modules.barcodes.elegir_barcode`.
+- Produces: la **misma interfaz que `zpl_builder`**, para que sean intercambiables:
+  - `etiqueta(nombre, precio, codigo, calibracion) -> str`
+  - `filas(nombre, precio, codigo, calibracion, cantidad) -> str`
+  - `regla(calibracion) -> str`
+  - `TIPOS_EPL: dict` — mapa de comando ZPL a tipo de barcode EPL.
+
+Nota para quien lo implemente: EPL2 es otro lenguaje, no un dialecto. Comandos de
+una letra, un comando por línea terminado en `\n`, sin `^`. El buffer se limpia
+con `N` y se imprime con `P1`. La oscuridad es absoluta (`D0`–`D15`), así que el
+`-6` relativo de ZPL se traduce a `D8`.
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+# tests/test_epl_builder.py
+import unittest
+
+from config import config
+from modules import epl_builder
+
+CAL = dict(config.CALIBRACION_DEFECTO)
+
+
+class TestEtiqueta(unittest.TestCase):
+    def test_limpia_el_buffer_y_manda_imprimir(self):
+        epl = epl_builder.etiqueta("ANAFE", None, "7794824658488", CAL)
+        self.assertTrue(epl.startswith("N\n"))
+        self.assertTrue(epl.strip().endswith("P1"))
+
+    def test_declara_ancho_y_largo(self):
+        epl = epl_builder.etiqueta("ANAFE", None, "7794824658488", CAL)
+        self.assertIn("q736", epl)
+        self.assertIn("Q166,24", epl)
+
+    def test_traduce_la_oscuridad_a_absoluta(self):
+        epl = epl_builder.etiqueta("ANAFE", None, "7794824658488", CAL)
+        self.assertIn("D8", epl)
+        self.assertNotIn("-6", epl)
+
+    def test_usa_e30_para_un_ean13(self):
+        epl = epl_builder.etiqueta("ANAFE", None, "7794824658488", CAL)
+        self.assertIn('"E30"', epl)
+
+    def test_usa_ua0_para_un_upca(self):
+        epl = epl_builder.etiqueta("SCUNCI", None, "677870568079", CAL)
+        self.assertIn('"UA0"', epl)
+
+    def test_usa_code128_para_un_codigo_interno(self):
+        epl = epl_builder.etiqueta("INTERNO", None, "123456", CAL)
+        self.assertIn('"1"', epl)
+
+    def test_dibuja_las_tres_columnas(self):
+        epl = epl_builder.etiqueta("ANAFE", None, "7794824658488", CAL)
+        for offset in CAL["offsets"]:
+            self.assertIn("A{},".format(offset + CAL["margen"]), epl)
+
+    def test_con_precio_lo_incluye_tres_veces(self):
+        epl = epl_builder.etiqueta("ANAFE", "$41.000,00", "7794824658488", CAL)
+        self.assertEqual(epl.count("$41.000,00"), 3)
+
+    def test_sin_precio_no_lo_incluye(self):
+        epl = epl_builder.etiqueta("ANAFE", None, "7794824658488", CAL)
+        self.assertNotIn("$", epl)
+
+    def test_escapa_las_comillas_del_nombre(self):
+        epl = epl_builder.etiqueta('ANAFE "O.F"', None, "7794824658488", CAL)
+        self.assertIn('\\"O.F\\"', epl)
+
+    def test_codigo_invalido_propaga_el_error(self):
+        with self.assertRaises(ValueError):
+            epl_builder.etiqueta("X", None, "A" * 60, CAL)
+
+
+class TestFilas(unittest.TestCase):
+    def test_tres_filas_son_tres_bloques(self):
+        epl = epl_builder.filas("ANAFE", None, "7794824658488", CAL, 3)
+        self.assertEqual(epl.count("P1"), 3)
+
+    def test_cantidad_menor_a_uno_falla(self):
+        with self.assertRaises(ValueError):
+            epl_builder.filas("ANAFE", None, "7794824658488", CAL, 0)
+
+
+class TestRegla(unittest.TestCase):
+    def test_tiene_marcas_numeradas(self):
+        epl = epl_builder.regla(CAL)
+        self.assertIn("LO", epl)
+        self.assertIn('"25"', epl)
+
+
+class TestMismaInterfazQueZpl(unittest.TestCase):
+    def test_expone_las_mismas_funciones(self):
+        from modules import zpl_builder
+
+        for nombre in ("etiqueta", "filas", "regla"):
+            self.assertTrue(hasattr(epl_builder, nombre))
+            self.assertTrue(hasattr(zpl_builder, nombre))
+
+
+if __name__ == "__main__":
+    unittest.main()
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `python3 -m unittest tests.test_epl_builder -v`
+Expected: FAIL con `ImportError: cannot import name 'epl_builder'`
+
+- [ ] **Step 3: Write minimal implementation**
+
+```python
+# modules/epl_builder.py
+# -*- coding: utf-8 -*-
+"""Arma la fila de 3 etiquetas en EPL2, para impresoras que no aceptan ZPL.
+
+EPL2 no es un dialecto de ZPL: son comandos de una letra, uno por linea, sin ^.
+El buffer se limpia con N y se imprime con P1. La oscuridad es absoluta (D0-D15),
+no relativa como el ^MD de ZPL.
+"""
+
+from modules import barcodes
+
+TIPOS_EPL = {
+    "^BEN": "E30",  # EAN-13
+    "^BUN": "UA0",  # UPC-A
+    "^B8N": "E80",  # EAN-8
+    "^BCN": "1",    # Code 128
+}
+
+GAP = 24          # separacion entre filas de etiquetas, en dots
+FUENTE = "2"      # fuente EPL de tamano fijo
+ALTO_BARRAS = 40
+
+
+def _escapar(texto):
+    """Escapa comillas y barras, que en EPL2 delimitan el texto."""
+    return texto.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _oscuridad_epl(oscuridad_zpl):
+    """Traduce el ^MD relativo de ZPL a la densidad absoluta D0-D15 de EPL."""
+    return max(0, min(15, 15 + oscuridad_zpl - 1))
+
+
+def _columna(x, nombre, precio, codigo, calibracion):
+    """Devuelve las lineas EPL de una columna con offset horizontal x."""
+    margen = calibracion["margen"]
+    comando, modulo = barcodes.elegir_barcode(codigo, calibracion["util"])
+    tipo = TIPOS_EPL[comando]
+
+    lineas = ['A{},10,0,{},1,1,N,"{}"'.format(x + margen, FUENTE, _escapar(nombre))]
+    if precio:
+        lineas.append(
+            'A{},48,0,{},2,2,N,"{}"'.format(x + margen, FUENTE, _escapar(precio))
+        )
+        y_barcode = 84
+    else:
+        y_barcode = 60
+
+    lineas.append(
+        'B{},{},0,{},{},{},{},N,"{}"'.format(
+            x + margen, y_barcode, tipo, modulo, modulo * 2, ALTO_BARRAS, codigo
+        )
+    )
+    lineas.append(
+        'A{},{},0,1,1,1,N,"{}"'.format(x + margen, y_barcode + 44, codigo)
+    )
+    return lineas
+
+
+def _encabezado(calibracion):
+    """Lineas comunes a toda etiqueta."""
+    return [
+        "N",
+        "q{}".format(calibracion["ancho_total"]),
+        "Q{},{}".format(calibracion["alto"], GAP),
+        "D{}".format(_oscuridad_epl(calibracion["oscuridad"])),
+    ]
+
+
+def etiqueta(nombre, precio, codigo, calibracion):
+    """Arma una fila completa de 3 etiquetas identicas en EPL2."""
+    lineas = _encabezado(calibracion)
+    for x in calibracion["offsets"]:
+        lineas.extend(_columna(x, nombre, precio, codigo, calibracion))
+    lineas.append("P1")
+    return "\n".join(lineas) + "\n"
+
+
+def filas(nombre, precio, codigo, calibracion, cantidad):
+    """Concatena `cantidad` filas identicas en un solo trabajo de impresion."""
+    if cantidad < 1:
+        raise ValueError("la cantidad de filas debe ser 1 o mas")
+    return etiqueta(nombre, precio, codigo, calibracion) * cantidad
+
+
+def regla(calibracion):
+    """Fila con marcas numeradas cada 25 dots, para calibrar contra el troquel."""
+    lineas = _encabezado(calibracion)
+    for x in range(0, calibracion["ancho_total"], 25):
+        lineas.append("LO{},0,2,60".format(x))
+        lineas.append('A{},64,0,1,1,1,N,"{}"'.format(x + 3, x))
+    lineas.append("P1")
+    return "\n".join(lineas) + "\n"
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `python3 -m unittest tests.test_epl_builder -v`
+Expected: PASS, 15 tests
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add modules/epl_builder.py tests/test_epl_builder.py
+git commit -m "feat: generador EPL2 con la misma interfaz que el de ZPL"
+```
+
+---
+
+### Task 6: Impresión multiplataforma
 
 **Files:**
 - Create: `modules/printers.py`
@@ -932,7 +1237,7 @@ git commit -m "feat: impresion RAW en Linux y Windows sin dependencias"
 
 ---
 
-### Task 6: GUI
+### Task 7: GUI
 
 **Files:**
 - Create: `main.py`
@@ -952,7 +1257,9 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 from config import config
-from modules import barcodes, printers, zpl_builder, zpl_parser
+from modules import barcodes, epl_builder, printers, zpl_builder, zpl_parser
+
+GENERADORES = {"zpl": zpl_builder, "epl": epl_builder}
 
 NOMBRES_SIMBOLOGIA = {
     "^BEN": "EAN-13",
@@ -1099,8 +1406,12 @@ class Aplicacion(tk.Tk):
                 text="{} (modulo {})".format(nombre, modulo), foreground="gray"
             )
 
+    def _generador(self):
+        """Devuelve el modulo generador segun el lenguaje configurado."""
+        return GENERADORES.get(self.calibracion["lenguaje"], zpl_builder)
+
     def _imprimir(self):
-        """Arma el ZPL con los campos actuales y lo manda a la impresora."""
+        """Arma la etiqueta con los campos actuales y la manda a la impresora."""
         nombre = self.nombre.get().strip()
         codigo = self.codigo.get().strip()
         precio = self.precio.get().strip() if self.con_precio.get() else None
@@ -1108,22 +1419,22 @@ class Aplicacion(tk.Tk):
             messagebox.showerror("Falta el codigo", "Cargá el codigo del producto.")
             return
         try:
-            zpl = zpl_builder.filas(
+            etiqueta = self._generador().filas(
                 nombre, precio, codigo, self.calibracion, self.filas.get()
             )
         except ValueError as error:
             messagebox.showerror("No se puede imprimir", str(error))
             return
-        self._enviar(zpl)
+        self._enviar(etiqueta)
 
     def _imprimir_regla(self):
-        """Imprime la regla de calibracion."""
-        self._enviar(zpl_builder.regla(self.calibracion))
+        """Imprime la regla de calibracion en el lenguaje configurado."""
+        self._enviar(self._generador().regla(self.calibracion))
 
-    def _enviar(self, zpl):
-        """Envia el ZPL, mostrando el error del sistema si falla."""
+    def _enviar(self, datos):
+        """Envia los datos crudos, mostrando el error del sistema si falla."""
         try:
-            printers.imprimir_raw(self.impresora.get(), zpl)
+            printers.imprimir_raw(self.impresora.get(), datos)
         except (printers.ErrorImpresion, ValueError) as error:
             messagebox.showerror("Error al imprimir", str(error))
 
@@ -1157,11 +1468,21 @@ class Aplicacion(tk.Tk):
         offsets.insert(0, ", ".join(str(x) for x in self.calibracion["offsets"]))
         offsets.grid(row=len(etiquetas), column=1, sticky="w", pady=2)
 
+        ttk.Label(marco, text="Lenguaje").grid(
+            row=len(etiquetas) + 1, column=0, sticky="w", pady=2
+        )
+        lenguaje = ttk.Combobox(
+            marco, width=8, state="readonly", values=["zpl", "epl"]
+        )
+        lenguaje.set(self.calibracion["lenguaje"])
+        lenguaje.grid(row=len(etiquetas) + 1, column=1, sticky="w", pady=2)
+
         def guardar():
             """Valida y persiste la calibracion."""
             try:
                 nueva = {c: int(e.get()) for c, e in campos.items()}
                 nueva["offsets"] = [int(x) for x in offsets.get().split(",")]
+                nueva["lenguaje"] = lenguaje.get()
             except ValueError:
                 messagebox.showerror(
                     "Valores invalidos", "Todos los campos deben ser numeros enteros."
@@ -1176,10 +1497,10 @@ class Aplicacion(tk.Tk):
             ventana.destroy()
 
         ttk.Button(marco, text="Imprimir regla", command=self._imprimir_regla).grid(
-            row=len(etiquetas) + 1, column=0, pady=10, sticky="w"
+            row=len(etiquetas) + 2, column=0, pady=10, sticky="w"
         )
         ttk.Button(marco, text="Guardar", command=guardar).grid(
-            row=len(etiquetas) + 1, column=1, pady=10, sticky="e"
+            row=len(etiquetas) + 2, column=1, pady=10, sticky="e"
         )
 
 
@@ -1202,16 +1523,24 @@ Expected: abre la ventana, el combo lista las impresoras del sistema, y al escri
 Run: cargar `~/Downloads/Etiqueta del producto (ZPL) (3).txt`, confirmar que el nombre sale sin el prefijo `[C-842B-17-7]`, que la simbología dice UPC-A, y darle Imprimir con 1 fila.
 Expected: sale una fila de 3 etiquetas bien alineadas.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 4: Verificar el lenguaje EPL contra la impresora**
+
+Run: en Configuracion → Calibracion, poner Lenguaje en `epl`, guardar, y darle
+Imprimir regla. La GC420t de esta instalacion acepta los dos lenguajes, asi que
+sirve para verificar el generador EPL sin otra impresora.
+Expected: sale la regla con las marcas numeradas, igual que en ZPL. El layout
+puede no coincidir dot a dot: las fuentes EPL son de tamano fijo.
+
+- [ ] **Step 5: Commit**
 
 ```bash
 git add main.py
-git commit -m "feat: GUI para cargar, editar e imprimir etiquetas"
+git commit -m "feat: GUI para cargar, editar e imprimir etiquetas en ZPL o EPL"
 ```
 
 ---
 
-### Task 7: Build automático y documentación
+### Task 8: Build automático y documentación
 
 **Files:**
 - Create: `.github/workflows/build.yml`
@@ -1300,6 +1629,17 @@ simbologia correcta y la calibracion del rollo.
 3. Ajustar el nombre si hace falta y marcar o desmarcar el precio.
 4. Elegir cuantas filas imprimir. Cada fila son 3 etiquetas.
 
+## ZPL y EPL
+
+La app emite los dos lenguajes. Se elige en **Configuracion → Calibracion →
+Lenguaje**. El default es ZPL.
+
+No se autodetecta: sin canal bidireccional no hay forma confiable de preguntarle
+a la impresora que habla, y el nombre de la cola engana. La GC420t de esta
+instalacion se llama `ZTC-GC420t--EPL--2` y sin embargo acepta ZPL.
+
+Si las etiquetas salen en blanco o con texto crudo, el lenguaje esta al reves.
+
 ## Calibracion
 
 En **Configuracion → Calibracion**. Se toca solo al cambiar de rollo.
@@ -1325,7 +1665,7 @@ Los ejecutables los compila GitHub Actions con PyInstaller.
 - [ ] **Step 4: Correr toda la suite**
 
 Run: `python3 -m unittest discover -s tests -v`
-Expected: PASS, 39 tests
+Expected: PASS, 59 tests
 
 - [ ] **Step 5: Commit**
 

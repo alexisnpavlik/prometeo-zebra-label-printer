@@ -23,6 +23,7 @@ Incluye:
 - Check para imprimir con o sin precio.
 - Elegir cuántas filas imprimir (cada fila = 3 etiquetas).
 - Calibración editable, oculta en Configuración.
+- Emitir ZPL o EPL2 según la impresora.
 
 Excluye (por ahora):
 - Tandas de varios productos.
@@ -47,6 +48,7 @@ zebra-label-printer/
 │   ├── printers.py            # listar impresoras + enviar RAW
 │   ├── zpl_parser.py          # TXT de Odoo -> dict
 │   ├── zpl_builder.py         # arma el ZPL 3-across
+│   ├── epl_builder.py         # lo mismo en EPL2
 │   └── barcodes.py            # simbología + verificadores
 └── .github/workflows/build.yml
 ```
@@ -88,6 +90,11 @@ que las etiquetas salieran cortadas.
 Si no encuentra el código, lanza `ParseError`. La GUI lo captura y deja cargar
 los campos a mano: un formato de Odoo que cambie no debe dejar la app inservible.
 
+El parser acepta entrada en **ZPL o EPL2**: detecta el lenguaje por la presencia
+de `^XA` y, si es EPL, extrae el texto de los comandos `A…,"texto"` y el código
+de los `B…,"codigo"`. El lenguaje del archivo de entrada es independiente del
+que se use para imprimir.
+
 ### modules/zpl_builder.py
 
 `etiqueta(nombre, precio, codigo, cal)` arma un `^XA…^XZ` con una fila de 3
@@ -103,8 +110,40 @@ Calibración (valores medidos el 2026-08-20 contra el troquel real):
 | `margen` | 11 | margen interno de cada columna |
 | `util` | 190 | ancho disponible para el contenido |
 | `oscuridad` | -6 | `^MD`; sin esto las barras engordan y el EAN no lee |
+| `lenguaje` | `"zpl"` | `"zpl"` o `"epl"`, según lo que acepte la impresora |
 
 `regla()` genera una fila con marcas y números cada 25 dots, para recalibrar.
+
+### modules/epl_builder.py
+
+Misma interfaz que `zpl_builder` (`etiqueta`, `filas`, `regla`) pero emitiendo
+EPL2, para impresoras que no aceptan ZPL.
+
+EPL2 no es un dialecto de ZPL, es otro lenguaje: comandos de una letra
+terminados en salto de línea, sin `^`. Equivalencias usadas:
+
+| Concepto | ZPL | EPL2 |
+|---|---|---|
+| Inicio / limpiar buffer | `^XA` | `N` |
+| Ancho de etiqueta | `^PW736` | `q736` |
+| Largo y gap | `^LL166` | `Q166,24` |
+| Oscuridad | `^MD-6` | `D8` |
+| Texto | `^FO x,y ^A0N,h,w ^FD…^FS` | `A x,y,0,font,h,v,N,"…"` |
+| Código de barras | `^BY m ^BEN,alto,…` | `B x,y,0,tipo,narrow,wide,alto,N,"…"` |
+| Imprimir | `^XZ` | `P1` |
+
+Simbologías: EAN-13 `E30`, UPC-A `UA0`, EAN-8 `E80`, Code 128 `1`.
+
+Dos diferencias que afectan al layout y no son cosméticas:
+
+- **La oscuridad es absoluta**, no relativa: `D0` a `D15`. El `-6` de ZPL se
+  traduce a `D8` (el default de fábrica es 15, que engorda las barras).
+- **Las fuentes son de tamaño fijo** (1 a 5) con multiplicadores enteros, no
+  escalables punto a punto como `^A0N`. El texto no cae en los mismos píxeles
+  que en ZPL, así que el layout se verifica por separado en cada lenguaje.
+
+`epl_builder` no reimplementa la elección de simbología: reusa
+`barcodes.elegir_barcode` y traduce el comando ZPL al tipo EPL.
 
 ### modules/printers.py
 
@@ -137,8 +176,8 @@ Filas:      [ 1 ▲▼ ]   (cada fila = 3 etiquetas)
                                   [ Imprimir ]
 ```
 
-Menú **Configuración → Calibración**: offsets por columna, ancho útil, margen,
-oscuridad, y botón *Imprimir regla*. Se guarda en `config.json`.
+Menú **Configuración → Calibración**: lenguaje (ZPL/EPL), offsets por columna,
+ancho útil, margen, oscuridad, y botón *Imprimir regla*. Se guarda en `config.json`.
 
 La GUI muestra qué simbología se eligió para el código cargado, y avisa cuando
 un código cae a Code 128 pudiendo parecer un EAN: es legible pero no va a
@@ -156,7 +195,7 @@ funcionar como código de producto en la caja.
 
 ## Testing
 
-Los módulos `barcodes`, `zpl_parser` y `zpl_builder` son funciones puras y se
+Los módulos `barcodes`, `zpl_parser`, `zpl_builder` y `epl_builder` son funciones puras y se
 prueban con unittest de la stdlib, sin impresora. Casos mínimos: el EAN-13 real
 del anafe, el UPC-A del scunci, un código interno corto, uno con verificador
 inválido, y un TXT de Odoo con y sin precio.
@@ -180,6 +219,11 @@ Windows es el que importa; el de Linux ahorra tener que instalar Python.
   las tres columnas no están equiespaciadas.
 - **Calibración oculta en Configuración:** se toca una vez por rollo, no en el
   uso diario.
+- **Lenguaje elegido a mano, no autodetectado:** sin canal bidireccional no hay
+  forma confiable de preguntarle a la impresora qué habla, y el nombre de la
+  cola engaña — la GC420t de esta instalación se llama `ZTC-GC420t--EPL--2` y
+  sin embargo acepta ZPL. Un desplegable con default ZPL es honesto; una
+  autodetección por nombre sería adivinar.
 
 ## Pendiente
 
