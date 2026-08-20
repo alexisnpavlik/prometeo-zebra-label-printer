@@ -20,9 +20,24 @@ def limpiar_nombre(nombre):
     """Saca el prefijo [CODIGO] y el sufijo (NNNNNN) que agrega Odoo.
 
     Conserva los parentesis con texto, como (CV), que son parte del nombre.
+
+    El sufijo a borrar es código interno de Odoo: todo dígitos o dígitos+letras+barras con 5+ dígitos.
+    El sufijo a conservar es unidad/talle: pocos dígitos + letras sin barras o sin muchos dígitos.
     """
     nombre = re.sub(r"^\s*\[[^\]]*\]\s*", "", nombre)
-    nombre = re.sub(r"\s*\([\d/A-Z]*\d[\d/A-Z]*\)\s*$", "", nombre)
+
+    # Check for suffix (XXXXX) at the end
+    match = re.search(r"\s*\(([^)]*)\)\s*$", nombre)
+    if match:
+        content = match.group(1)
+        digit_count = sum(1 for c in content if c.isdigit())
+        has_slash = '/' in content
+        is_all_digits = re.match(r"^\d+$", content)
+
+        # Remove if: all digits OR (has slash AND 5+ digits)
+        if is_all_digits or (has_slash and digit_count >= 5):
+            nombre = nombre[:match.start()].rstrip()
+
     return nombre.strip()
 
 

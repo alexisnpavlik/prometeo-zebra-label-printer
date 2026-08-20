@@ -88,6 +88,18 @@ class TestLimpiarNombre(unittest.TestCase):
     def test_conserva_parentesis_no_numericos(self):
         self.assertEqual(zpl_parser.limpiar_nombre("SCUNCI (CV)"), "SCUNCI (CV)")
 
+    def test_conserva_parentesis_con_pocas_unidades(self):
+        self.assertEqual(zpl_parser.limpiar_nombre("PILA ALCALINA AA (4UN)"), "PILA ALCALINA AA (4UN)")
+
+    def test_conserva_parentesis_con_ml(self):
+        self.assertEqual(zpl_parser.limpiar_nombre("GASEOSA COLA (500ML)"), "GASEOSA COLA (500ML)")
+
+    def test_conserva_parentesis_con_talle(self):
+        self.assertEqual(zpl_parser.limpiar_nombre("CAMISA TALLE (XL2)"), "CAMISA TALLE (XL2)")
+
+    def test_saca_codigo_odoo_con_barras(self):
+        self.assertEqual(zpl_parser.limpiar_nombre("ANAFE (658488/202039E/202040E)"), "ANAFE")
+
 
 if __name__ == "__main__":
     unittest.main()
