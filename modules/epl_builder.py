@@ -21,8 +21,12 @@ ALTO_BARRAS = 40
 
 
 def _escapar(texto):
-    """Escapa comillas y barras, que en EPL2 delimitan el texto."""
-    return texto.replace("\\", "\\\\").replace('"', '\\"')
+    """Escapa comillas dobles dentro de campos de texto EPL2.
+
+    Solo se escapa la comilla doble con \", que es el escape documentado por EPL2.
+    La barra invertida no se toca: EPL2 no define \\ como escape.
+    """
+    return texto.replace('"', '\\"')
 
 
 def _oscuridad_epl(oscuridad_zpl):
