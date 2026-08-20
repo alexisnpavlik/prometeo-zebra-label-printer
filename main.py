@@ -29,6 +29,8 @@ class Aplicacion(tk.Tk):
         self._construir_menu()
         self._construir_widgets()
         self._refrescar_impresoras()
+        if not config.config_escribible():
+            self.title("Etiquetas Zebra — configuracion no persistible")
 
     def _construir_menu(self):
         """Menu con la calibracion, fuera del uso diario."""
@@ -194,7 +196,10 @@ class Aplicacion(tk.Tk):
             return
         if self.calibracion.get("impresora") != impresora:
             self.calibracion["impresora"] = impresora
-            config.guardar(self.calibracion)
+            try:
+                config.guardar(self.calibracion)
+            except OSError:
+                pass  # accion de fondo: que no se recuerde no debe interrumpir
 
     def _validar_calibracion(self, datos):
         """Devuelve un mensaje de error si `datos` rompe la geometria, o None si esta bien."""
@@ -288,7 +293,14 @@ class Aplicacion(tk.Tk):
                 messagebox.showerror("Valores invalidos", error)
                 return
             self.calibracion.update(nueva)
-            config.guardar(self.calibracion)
+            try:
+                config.guardar(self.calibracion)
+            except OSError as error:
+                messagebox.showwarning(
+                    "No se pudo guardar",
+                    "La calibracion no se pudo persistir ({}).\n\n"
+                    "El cambio vale solo para esta sesion.".format(error),
+                )
             self._actualizar_simbologia()
             ventana.destroy()
 
