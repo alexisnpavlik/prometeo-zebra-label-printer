@@ -94,8 +94,12 @@ class Aplicacion(tk.Tk):
         disponibles = printers.listar()
         self.impresora["values"] = disponibles
         if disponibles:
-            preferida = [n for n in disponibles if "GC420" in n or "ZTC" in n]
-            self.impresora.set(preferida[0] if preferida else disponibles[0])
+            recordada = self.calibracion.get("impresora", "")
+            if recordada and recordada in disponibles:
+                self.impresora.set(recordada)
+            else:
+                preferida = [n for n in disponibles if "GC420" in n or "ZTC" in n]
+                self.impresora.set(preferida[0] if preferida else disponibles[0])
             self.boton_imprimir.state(["!disabled"])
         else:
             self.impresora.set("")
@@ -111,7 +115,6 @@ class Aplicacion(tk.Tk):
             return
         with open(ruta, "r", encoding="utf-8", errors="replace") as archivo:
             texto = archivo.read()
-        self.archivo.config(text=ruta.split("/")[-1], foreground="black")
         try:
             datos = zpl_parser.parsear(texto)
         except zpl_parser.ParseError as error:
@@ -120,6 +123,7 @@ class Aplicacion(tk.Tk):
                 "{}\n\nCargá los campos a mano.".format(error),
             )
             return
+        self.archivo.config(text=ruta.split("/")[-1], foreground="black")
         self._completar(datos)
 
     def _completar(self, datos):
@@ -182,10 +186,36 @@ class Aplicacion(tk.Tk):
 
     def _enviar(self, datos):
         """Envia los datos crudos, mostrando el error del sistema si falla."""
+        impresora = self.impresora.get()
         try:
-            printers.imprimir_raw(self.impresora.get(), datos)
+            printers.imprimir_raw(impresora, datos)
         except (printers.ErrorImpresion, ValueError) as error:
             messagebox.showerror("Error al imprimir", str(error))
+            return
+        if self.calibracion.get("impresora") != impresora:
+            self.calibracion["impresora"] = impresora
+            config.guardar(self.calibracion)
+
+    def _validar_calibracion(self, datos):
+        """Devuelve un mensaje de error si `datos` rompe la geometria, o None si esta bien."""
+        if datos["ancho_total"] <= 0:
+            return "El ancho total tiene que ser mayor que cero."
+        if datos["alto"] <= 0:
+            return "El alto tiene que ser mayor que cero."
+        if datos["util"] <= 0:
+            return "El ancho util tiene que ser mayor que cero."
+        if datos["margen"] < 0:
+            return "El margen no puede ser negativo."
+        if datos["margen"] + datos["util"] > datos["ancho_total"]:
+            return "Margen + ancho util no puede superar el ancho total."
+        for offset in datos["offsets"]:
+            if offset < 0:
+                return "Los offsets no pueden ser negativos."
+            if offset + datos["margen"] + datos["util"] > datos["ancho_total"]:
+                return "Algun offset + margen + ancho util supera el ancho total."
+        if not -30 <= datos["oscuridad"] <= 30:
+            return "La oscuridad tiene que estar entre -30 y 30."
+        return None
 
     def _abrir_calibracion(self):
         """Ventana de calibracion, con los valores del config.json."""
@@ -226,8 +256,21 @@ class Aplicacion(tk.Tk):
         lenguaje.set(self.calibracion["lenguaje"])
         lenguaje.grid(row=len(etiquetas) + 1, column=1, sticky="w", pady=2)
 
+        def _refrescar_campos(datos):
+            """Vuelca `datos` en los entries de la ventana de calibracion."""
+            for clave, entrada in campos.items():
+                entrada.delete(0, tk.END)
+                entrada.insert(0, str(datos[clave]))
+            offsets.delete(0, tk.END)
+            offsets.insert(0, ", ".join(str(x) for x in datos["offsets"]))
+            lenguaje.set(datos["lenguaje"])
+
+        def restaurar():
+            """Repone los valores por defecto en los campos, sin guardar aun."""
+            _refrescar_campos(config.CALIBRACION_DEFECTO)
+
         def guardar():
-            """Valida y persiste la calibracion."""
+            """Valida y persiste la calibracion; no guarda nada si algo es invalido."""
             try:
                 nueva = {c: int(e.get()) for c, e in campos.items()}
                 nueva["offsets"] = [int(x) for x in offsets.get().split(",")]
@@ -240,6 +283,10 @@ class Aplicacion(tk.Tk):
             if len(nueva["offsets"]) < 1:
                 messagebox.showerror("Offsets invalidos", "Poné al menos un offset.")
                 return
+            error = self._validar_calibracion(nueva)
+            if error:
+                messagebox.showerror("Valores invalidos", error)
+                return
             self.calibracion.update(nueva)
             config.guardar(self.calibracion)
             self._actualizar_simbologia()
@@ -247,6 +294,9 @@ class Aplicacion(tk.Tk):
 
         ttk.Button(marco, text="Imprimir regla", command=self._imprimir_regla).grid(
             row=len(etiquetas) + 2, column=0, pady=10, sticky="w"
+        )
+        ttk.Button(marco, text="Restaurar valores por defecto", command=restaurar).grid(
+            row=len(etiquetas) + 3, column=0, columnspan=2, pady=(0, 10), sticky="w"
         )
         ttk.Button(marco, text="Guardar", command=guardar).grid(
             row=len(etiquetas) + 2, column=1, pady=10, sticky="e"
