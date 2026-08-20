@@ -3,6 +3,10 @@
 Imprime etiquetas de producto en una Zebra GC420t con rollo 3-across, a partir
 del TXT que exporta Odoo.
 
+Hecho por [Prometeo](https://prometeo.com.ar).
+
+![Interfaz](docs/img/ui-claro.png)
+
 ## Por que existe
 
 El reporte de Odoo genera un ZPL para una etiqueta mucho mas ancha que el rollo
@@ -10,6 +14,13 @@ real, y usa `^BC` (Code 128) para codigos que son EAN-13 o UPC-A. Enviado tal
 cual, el contenido se corta e invade la etiqueta vecina y el codigo no lee como
 codigo de producto. Esta app extrae los datos y rearma la etiqueta con la
 simbologia correcta y la calibracion del rollo.
+
+## Tema
+
+Claro y oscuro, en **Configuracion → Tema**. Se guarda en `config.json`.
+
+El logo va embebido en base64 dentro de `modules/branding.py`: Tk 8.6 lee PNG de
+forma nativa, asi que no hace falta Pillow ni `--add-data` en PyInstaller.
 
 ## Uso
 
