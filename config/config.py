@@ -1,0 +1,57 @@
+# -*- coding: utf-8 -*-
+"""Calibracion del rollo, persistida en config.json junto al ejecutable."""
+
+import json
+import os
+import sys
+
+CALIBRACION_DEFECTO = {
+    "ancho_total": 736,   # ^PW, ancho del cabezal en dots
+    "alto": 166,          # ^LL, largo de la etiqueta
+    "offsets": [0, 256, 508],  # x de cada columna; el paso NO es uniforme
+    "margen": 11,         # margen interno de cada columna
+    "util": 190,          # ancho disponible para el contenido
+    "oscuridad": -6,      # ^MD; sin esto las barras engordan y el EAN no lee
+    "lenguaje": "zpl",    # "zpl" o "epl"; se elige a mano, no se autodetecta
+}
+
+
+def directorio_base():
+    """Directorio del ejecutable, o del fuente si corre sin congelar."""
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def ruta_config():
+    """Ruta del config.json."""
+    return os.path.join(directorio_base(), "config.json")
+
+
+def cargar(ruta=None):
+    """Carga la calibracion, creando el archivo con los defectos si falta.
+
+    Un JSON corrupto o incompleto no rompe la app: se completa con los defectos.
+    """
+    ruta = ruta or ruta_config()
+    calibracion = dict(CALIBRACION_DEFECTO)
+    if os.path.exists(ruta):
+        try:
+            with open(ruta, "r", encoding="utf-8") as archivo:
+                guardado = json.load(archivo)
+            if isinstance(guardado, dict):
+                calibracion.update(
+                    {k: v for k, v in guardado.items() if k in CALIBRACION_DEFECTO}
+                )
+        except (ValueError, OSError):
+            pass
+    else:
+        guardar(calibracion, ruta)
+    return calibracion
+
+
+def guardar(calibracion, ruta=None):
+    """Escribe la calibracion en el JSON."""
+    ruta = ruta or ruta_config()
+    with open(ruta, "w", encoding="utf-8") as archivo:
+        json.dump(calibracion, archivo, indent=2, ensure_ascii=False)
