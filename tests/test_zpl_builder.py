@@ -46,6 +46,27 @@ class TestEtiqueta(unittest.TestCase):
             zpl_builder.etiqueta("X", None, "A" * 60, CAL)
 
 
+class TestEscapar(unittest.TestCase):
+    def test_escapa_el_guion_bajo_para_que_no_se_lea_como_hex(self):
+        # Con ^FH activo, "_5E" en el texto se leeria como el caracter que
+        # codifica ese hex si el guion bajo original no se escapa primero.
+        escapado = zpl_builder._escapar("SKU_5E123")
+        self.assertNotIn("SKU_5E123", escapado)
+        self.assertIn("_5F5E123", escapado)
+
+    def test_escapa_circunflejo_virgulilla_y_guion_bajo_en_orden(self):
+        escapado = zpl_builder._escapar("A^B~C_D")
+        self.assertEqual(escapado, "A_5EB_7EC_5FD")
+
+    def test_nombre_con_guion_bajo_no_genera_secuencia_hex_ambigua(self):
+        zpl = zpl_builder.etiqueta("SKU_5E123", None, "7794824658488", CAL)
+        # El literal original con guion bajo sin escapar no debe sobrevivir:
+        # si aparece "SKU_5E123" tal cual, el firmware lo leeria como
+        # SKU + el caracter 0x5E (o sea "^"), no como el texto real.
+        self.assertNotIn("SKU_5E123", zpl)
+        self.assertIn("SKU_5F5E123", zpl)
+
+
 class TestFilas(unittest.TestCase):
     def test_tres_filas_son_tres_bloques(self):
         zpl = zpl_builder.filas("ANAFE", None, "7794824658488", CAL, 3)

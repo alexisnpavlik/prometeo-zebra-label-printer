@@ -17,8 +17,14 @@ def _escapar(texto):
     "^4" se interpreta como comando desconocido, arrastrando el resto de la
     columna. ^FH\\ antes del campo habilita las secuencias _XX (hex de 2
     digitos); reemplazando ^ por _5E y ~ por _7E el dato sale literal.
+
+    El guion bajo tambien hay que escaparlo, y antes que nada: con ^FH activo
+    el firmware trata cualquier _XX como escape hexadecimal, asi que un
+    guion bajo literal seguido de dos hex validos (un SKU como "SKU_5E123")
+    se reinterpretaria como el caracter que codifica. Escapar _ primero
+    evita re-escapar los guiones bajos que generan los reemplazos de ^ y ~.
     """
-    return texto.replace("^", "_5E").replace("~", "_7E")
+    return texto.replace("_", "_5F").replace("^", "_5E").replace("~", "_7E")
 
 
 def _columna(x, nombre, precio, codigo, calibracion):
