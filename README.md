@@ -76,6 +76,19 @@ ancho util 190, oscuridad -6.
 
 La oscuridad negativa importa: sin ella las barras engordan y el codigo no lee.
 
+## Descargas
+
+Los ejecutables se publican en
+[Releases](https://github.com/alexisnpavlik/prometeo-zebra-label-printer/releases):
+`etiquetas-zebra-windows.exe` y `etiquetas-zebra-linux`. No requieren instalar nada.
+
+En Linux hay que darle permiso de ejecucion:
+
+    chmod +x etiquetas-zebra-linux
+    ./etiquetas-zebra-linux
+
+Cada tag `vX.Y.Z` que se empuja dispara la compilacion y publica un release nuevo.
+
 ## Desarrollo
 
 Solo biblioteca estandar. Sin `pip install` para correrlo:

@@ -4,6 +4,7 @@ name: build
 on:
   push:
     branches: [main, master]
+    tags: ["v*"]
   workflow_dispatch:
 
 jobs:
@@ -23,8 +24,10 @@ jobs:
         include:
           - os: windows-latest
             nombre: etiquetas-zebra-windows
+            binario: etiquetas-zebra.exe
           - os: ubuntu-latest
             nombre: etiquetas-zebra-linux
+            binario: etiquetas-zebra
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -36,4 +39,45 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.nombre }}
-          path: dist/
+          path: dist/${{ matrix.binario }}
+          if-no-files-found: error
+
+  release:
+    # solo cuando se empuja un tag vX.Y.Z
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artefactos
+
+      - name: Renombrar los binarios con el sistema
+        run: |
+          mkdir -p entrega
+          cp artefactos/etiquetas-zebra-windows/etiquetas-zebra.exe entrega/etiquetas-zebra-windows.exe
+          cp artefactos/etiquetas-zebra-linux/etiquetas-zebra entrega/etiquetas-zebra-linux
+          chmod +x entrega/etiquetas-zebra-linux
+          ls -l entrega
+
+      - name: Publicar el release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "Etiquetas Zebra ${GITHUB_REF_NAME}" \
+            --notes "$(cat <<'NOTAS'
+          Descargas:
+
+          - **Windows**: `etiquetas-zebra-windows.exe` — se ejecuta directo, no requiere instalar nada.
+          - **Linux**: `etiquetas-zebra-linux` — dar permiso de ejecucion con `chmod +x` y correr.
+
+          La calibracion se guarda en un `config.json` junto al ejecutable, asi que conviene
+          dejarlo en una carpeta con permiso de escritura.
+          NOTAS
+          )" \
+            entrega/etiquetas-zebra-windows.exe \
+            entrega/etiquetas-zebra-linux
