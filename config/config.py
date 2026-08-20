@@ -14,6 +14,7 @@ CALIBRACION_DEFECTO = {
     "util": 190,          # ancho disponible para el contenido
     "oscuridad": -6,      # ^MD; sin esto las barras engordan y el EAN no lee
     "lenguaje": "zpl",    # "zpl" o "epl"; se elige a mano, no se autodetecta
+    "impresora": "",      # nombre de cola recordado; vacio si nunca se imprimio
 }
 
 
