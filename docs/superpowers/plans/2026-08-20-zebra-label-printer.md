@@ -1665,7 +1665,7 @@ Los ejecutables los compila GitHub Actions con PyInstaller.
 - [ ] **Step 4: Correr toda la suite**
 
 Run: `python3 -m unittest discover -s tests -v`
-Expected: PASS, 59 tests
+Expected: PASS, 60 tests
 
 - [ ] **Step 5: Commit**
 
