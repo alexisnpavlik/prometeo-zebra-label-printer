@@ -9,6 +9,9 @@ codigo de producto. Este modulo elige el comando correcto segun el codigo.
 import math
 
 ANCHO_MAX_DEFECTO = 190
+MODULOS_EAN13 = 95
+MODULOS_UPCA = 95
+MODULOS_EAN8 = 67
 
 
 def verificador(datos):
@@ -42,11 +45,32 @@ def elegir_barcode(codigo, ancho_max=ANCHO_MAX_DEFECTO):
 
     if codigo.isdigit():
         if len(codigo) == 13 and codigo[12] == verificador(codigo[:12]):
-            return "^BEN", 2
+            if MODULOS_EAN13 * 2 <= ancho_max:
+                return "^BEN", 2
+            raise ValueError(
+                "{!r} necesita {} modulos y no entra en {} dots. "
+                "Usa un codigo mas corto o un rollo mas ancho.".format(
+                    codigo, MODULOS_EAN13, ancho_max
+                )
+            )
         if len(codigo) == 12 and codigo[11] == verificador(codigo[:11]):
-            return "^BUN", 2
+            if MODULOS_UPCA * 2 <= ancho_max:
+                return "^BUN", 2
+            raise ValueError(
+                "{!r} necesita {} modulos y no entra en {} dots. "
+                "Usa un codigo mas corto o un rollo mas ancho.".format(
+                    codigo, MODULOS_UPCA, ancho_max
+                )
+            )
         if len(codigo) == 8 and codigo[7] == verificador(codigo[:7]):
-            return "^B8N", 2
+            if MODULOS_EAN8 * 2 <= ancho_max:
+                return "^B8N", 2
+            raise ValueError(
+                "{!r} necesita {} modulos y no entra en {} dots. "
+                "Usa un codigo mas corto o un rollo mas ancho.".format(
+                    codigo, MODULOS_EAN8, ancho_max
+                )
+            )
 
     modulos = modulos_code128(codigo)
     for modulo in (3, 2, 1):

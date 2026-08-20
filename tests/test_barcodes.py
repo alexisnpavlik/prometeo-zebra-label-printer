@@ -40,6 +40,13 @@ class TestElegirBarcode(unittest.TestCase):
         with self.assertRaises(ValueError):
             barcodes.elegir_barcode("   ")
 
+    def test_ean13_valido_pero_no_entra_en_ancho_reducido(self):
+        with self.assertRaises(ValueError):
+            barcodes.elegir_barcode("7794824658488", ancho_max=150)
+
+    def test_ean8_valido_entra_en_ancho_150(self):
+        self.assertEqual(barcodes.elegir_barcode("12345670", ancho_max=150), ("^B8N", 2))
+
 
 if __name__ == "__main__":
     unittest.main()
