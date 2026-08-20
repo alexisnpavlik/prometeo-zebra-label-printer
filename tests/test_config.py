@@ -44,6 +44,16 @@ class TestConfig(unittest.TestCase):
         self.assertEqual(cal["offsets"], [0, 1, 2])
         self.assertEqual(cal["margen"], 11)
 
+    def test_no_mutates_default_offsets_in_place(self):
+        cal = config.cargar(self.ruta)
+        cal["offsets"][0] = 999
+        self.assertEqual(config.CALIBRACION_DEFECTO["offsets"], [0, 256, 508])
+
+    def test_loaded_offsets_are_different_object(self):
+        cal1 = config.cargar(self.ruta)
+        cal2 = config.cargar(self.ruta)
+        self.assertIsNot(cal1["offsets"], cal2["offsets"])
+
 
 if __name__ == "__main__":
     unittest.main()

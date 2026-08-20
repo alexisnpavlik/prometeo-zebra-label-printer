@@ -35,7 +35,7 @@ def cargar(ruta=None):
     Un JSON corrupto o incompleto no rompe la app: se completa con los defectos.
     """
     ruta = ruta or ruta_config()
-    calibracion = dict(CALIBRACION_DEFECTO)
+    calibracion = copy.deepcopy(CALIBRACION_DEFECTO)
     if os.path.exists(ruta):
         try:
             with open(ruta, "r", encoding="utf-8") as archivo:
