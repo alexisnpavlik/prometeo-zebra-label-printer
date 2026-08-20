@@ -929,7 +929,7 @@ def _columna(x, nombre, precio, codigo, calibracion):
         y_barcode = 60
 
     lineas.append(
-        'B{},{},0,{},{},{},{},N,"{}"'.format(
+        'B{},{},0,"{}",{},{},{},N,"{}"'.format(
             x + margen, y_barcode, tipo, modulo, modulo * 2, ALTO_BARRAS, codigo
         )
     )
