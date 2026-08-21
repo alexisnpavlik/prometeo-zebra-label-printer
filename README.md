@@ -72,9 +72,23 @@ mal, el boton **Restaurar valores por defecto** vuelve a los valores del rollo
 actual.
 
 Valores del rollo actual: ancho 736, alto 166, offsets `0, 256, 508`, margen 11,
-ancho util 190, oscuridad -6.
+ancho util 190, oscuridad 0.
 
-La oscuridad negativa importa: sin ella las barras engordan y el codigo no lee.
+### Oscuridad
+
+Por defecto es **0: la app no toca la densidad** y cada impresora usa la que tiene
+configurada. Es lo correcto, porque el ajuste no es portable entre impresoras:
+
+- En ZPL, `^MD` es **relativo** a la densidad de la impresora. Un `-6` que queda
+  bien en una configurada en 15 deja en 4 a una configurada en 10: sale borrosa,
+  como si le faltara tinta.
+- En EPL2 el comando `D` es **absoluto** y pisa directamente la calibracion de la
+  impresora.
+
+Solo conviene tocarla cuando una impresora concreta imprime mal por su propia
+configuracion. En la GC420t de esta instalacion, con densidad 15 de fabrica, las
+barras engordaban y el EAN no leia; ahi `-6` lo resolvia. Ese valor **vale para esa
+impresora**, no para todas.
 
 ## Descargas
 

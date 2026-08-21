@@ -21,7 +21,7 @@ class TestConfig(unittest.TestCase):
         cal = config.cargar(self.ruta)
         self.assertEqual(cal["ancho_total"], 736)
         self.assertEqual(cal["alto"], 166)
-        self.assertEqual(cal["oscuridad"], -6)
+        self.assertEqual(cal["oscuridad"], 0)  # 0 = respetar la de la impresora
 
     def test_el_lenguaje_por_defecto_es_zpl(self):
         self.assertEqual(config.cargar(self.ruta)["lenguaje"], "zpl")

@@ -63,10 +63,18 @@ def _columna(x, nombre, precio, codigo, calibracion):
 
 
 def _encabezado(calibracion):
-    """Comandos comunes a toda etiqueta."""
-    return "^XA^CI28^PW{}^LL{}^LH0,0^LS0^MD{}".format(
-        calibracion["ancho_total"], calibracion["alto"], calibracion["oscuridad"]
+    """Comandos comunes a toda etiqueta.
+
+    Con oscuridad 0 no se emite ^MD y la impresora usa la densidad que tiene
+    configurada. ^MD es RELATIVO: el mismo valor da resultados distintos en cada
+    impresora, y en una configurada baja deja la etiqueta ilegible.
+    """
+    encabezado = "^XA^CI28^PW{}^LL{}^LH0,0^LS0".format(
+        calibracion["ancho_total"], calibracion["alto"]
     )
+    if calibracion["oscuridad"]:
+        encabezado += "^MD{}".format(calibracion["oscuridad"])
+    return encabezado
 
 
 def etiqueta(nombre, precio, codigo, calibracion):

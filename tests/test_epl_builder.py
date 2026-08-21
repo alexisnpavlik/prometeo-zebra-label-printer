@@ -17,8 +17,14 @@ class TestEtiqueta(unittest.TestCase):
         self.assertIn("q736", epl)
         self.assertIn("Q166,24", epl)
 
-    def test_traduce_la_oscuridad_a_absoluta(self):
-        epl = epl_builder.etiqueta("ANAFE", None, "7794824658488", CAL)
+    def test_sin_oscuridad_no_emite_densidad(self):
+        """En EPL la densidad es absoluta: emitirla pisaria la de la impresora."""
+        epl = epl_builder.etiqueta("ANAFE", None, "7794824658488", dict(CAL, oscuridad=0))
+        for linea in epl.splitlines():
+            self.assertFalse(linea.startswith("D"), linea)
+
+    def test_con_oscuridad_traduce_a_absoluta(self):
+        epl = epl_builder.etiqueta("ANAFE", None, "7794824658488", dict(CAL, oscuridad=-6))
         self.assertIn("D8", epl)
         self.assertNotIn("-6", epl)
 

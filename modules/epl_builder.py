@@ -90,13 +90,20 @@ def _columna(x, nombre, precio, codigo, calibracion):
 
 
 def _encabezado(calibracion):
-    """Lineas comunes a toda etiqueta."""
-    return [
+    """Lineas comunes a toda etiqueta.
+
+    Con oscuridad 0 no se emite el comando D y la impresora usa la densidad que
+    tiene configurada. En EPL2 la densidad es ABSOLUTA, asi que emitirla pisa la
+    calibracion de la impresora y puede dejarla demasiado clara.
+    """
+    lineas = [
         "N",
         "q{}".format(calibracion["ancho_total"]),
         "Q{},{}".format(calibracion["alto"], GAP),
-        "D{}".format(_oscuridad_epl(calibracion["oscuridad"])),
     ]
+    if calibracion["oscuridad"]:
+        lineas.append("D{}".format(_oscuridad_epl(calibracion["oscuridad"])))
+    return lineas
 
 
 def etiqueta(nombre, precio, codigo, calibracion):

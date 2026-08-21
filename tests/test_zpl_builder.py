@@ -27,10 +27,18 @@ class TestEtiqueta(unittest.TestCase):
         for offset in CAL["offsets"]:
             self.assertIn("^FO{},".format(offset + CAL["margen"]), zpl)
 
-    def test_incluye_ancho_alto_y_oscuridad(self):
+    def test_incluye_ancho_y_alto(self):
         zpl = zpl_builder.etiqueta("ANAFE", None, "7794824658488", CAL)
         self.assertIn("^PW736", zpl)
         self.assertIn("^LL166", zpl)
+
+    def test_sin_oscuridad_no_emite_md(self):
+        """Con 0 manda la densidad de la impresora, no la nuestra."""
+        zpl = zpl_builder.etiqueta("ANAFE", None, "7794824658488", dict(CAL, oscuridad=0))
+        self.assertNotIn("^MD", zpl)
+
+    def test_con_oscuridad_emite_md(self):
+        zpl = zpl_builder.etiqueta("ANAFE", None, "7794824658488", dict(CAL, oscuridad=-6))
         self.assertIn("^MD-6", zpl)
 
     def test_con_precio_lo_incluye(self):

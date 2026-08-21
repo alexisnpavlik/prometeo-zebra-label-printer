@@ -12,7 +12,7 @@ CALIBRACION_DEFECTO = {
     "offsets": [0, 256, 508],  # x de cada columna; el paso NO es uniforme
     "margen": 11,         # margen interno de cada columna
     "util": 190,          # ancho disponible para el contenido
-    "oscuridad": -6,      # ^MD; sin esto las barras engordan y el EAN no lee
+    "oscuridad": 0,       # ajuste de densidad; 0 = respetar la de la impresora
     "lenguaje": "zpl",    # "zpl" o "epl"; se elige a mano, no se autodetecta
     "impresora": "",     # nombre de cola recordado; vacio si nunca se imprimio
     "tema": "claro",     # apariencia de la GUI: "claro" u "oscuro"
