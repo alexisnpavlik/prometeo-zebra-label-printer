@@ -4,3 +4,4 @@ build/
 dist/
 *.spec
 config.json
+.codex/config.toml
