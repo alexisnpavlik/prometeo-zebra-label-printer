@@ -2,13 +2,12 @@
 """Arma la fila de 3 etiquetas en EPL2, para impresoras que no aceptan ZPL.
 
 EPL2 no es un dialecto de ZPL: son comandos de una letra, uno por linea, sin ^.
-El buffer se limpia con N y se imprime con P1. La oscuridad es absoluta (D0-D15),
-no relativa como el ^MD de ZPL.
+El buffer se limpia con N y se imprime con P1. Misma disposicion que el ZPL,
+con las fuentes que usaba la app vieja en EPL: 2 para el nombre y 3 para el
+precio.
 """
 
-import textwrap
-
-from modules import barcodes
+from modules import barcodes, textos, zpl_builder
 
 TIPOS_EPL = {
     "^BEN": "E30",  # EAN-13
@@ -18,9 +17,14 @@ TIPOS_EPL = {
 }
 
 GAP = 24          # separacion entre filas de etiquetas, en dots
-FUENTE = "2"      # fuente EPL de tamano fijo
-ANCHO_CARACTER_FUENTE_2 = 10  # dots por caracter, fuente 2 con multiplicador 1
-ALTO_BARRAS = 40
+ALTO_BARRAS = zpl_builder.ALTO_BARRAS
+
+# Avance por caracter de cada fuente EPL a 203 dpi (glifo + 2 dots de
+# separacion), con multiplicador 1. Son de ancho fijo: el ancho real de un
+# texto es largo x avance x multiplicador horizontal.
+AVANCE_FUENTE = {1: 10, 2: 12, 3: 14, 4: 16, 5: 34}
+FUENTE_NOMBRE = 2
+FUENTE_PRECIO = 3
 
 
 def _escapar(texto):
@@ -37,73 +41,52 @@ def _escapar(texto):
     return texto
 
 
-def _oscuridad_epl(oscuridad_zpl):
-    """Traduce el ^MD relativo de ZPL a la densidad absoluta D0-D15 de EPL.
-
-    La fórmula 15 + oscuridad_zpl - 1 mapea el -6 de ZPL a D8, que es el valor
-    calibrado para que las barras no engordan en esta impresora. El clamp
-    mantiene el resultado en 0-15 para cualquier entrada.
-    """
-    return max(0, min(15, 15 + oscuridad_zpl - 1))
-
-
-def _partir_nombre(nombre, ancho_util):
-    """Envuelve el nombre en hasta 2 lineas que entren en ancho_util.
-
-    EPL2 no tiene equivalente al ^FB de ZPL (envolvimiento automatico dentro
-    de un bloque), asi que hay que partirlo a mano. La fuente 2 mide
-    ANCHO_CARACTER_FUENTE_2 dots por caracter con multiplicador 1. Corta por
-    palabras cuando se puede; lo que no entra en 2 lineas se descarta.
-    """
-    max_caracteres = max(1, ancho_util // ANCHO_CARACTER_FUENTE_2)
-    lineas = textwrap.wrap(nombre, width=max_caracteres, break_long_words=True)
-    return lineas[:2]
+def _texto(x, y, util, texto, fuente, mult_h=1, mult_v=1):
+    """Linea A con `texto` centrado en el ancho util; se recorta si no entra."""
+    avance = AVANCE_FUENTE[fuente] * mult_h
+    texto = textos.recortar(texto, util, lambda caracter: avance)
+    sobrante = util - len(texto) * avance
+    return 'A{},{},0,{},{},{},N,"{}"'.format(
+        x + sobrante // 2, y, fuente, mult_h, mult_v, _escapar(texto)
+    )
 
 
 def _columna(x, nombre, precio, codigo, calibracion):
     """Devuelve las lineas EPL de una columna con offset horizontal x."""
-    margen = calibracion["margen"]
-    comando, modulo = barcodes.elegir_barcode(codigo, calibracion["util"])
-    tipo = TIPOS_EPL[comando]
+    x = x + calibracion["margen"]
+    util = calibracion["util"]
+    comando, modulo = barcodes.elegir_barcode(codigo, util)
+    fuente_codigo = 2 if len(codigo) * AVANCE_FUENTE[2] <= util else 1
 
     lineas = [
-        'A{},{},0,{},1,1,N,"{}"'.format(x + margen, y, FUENTE, _escapar(linea_nombre))
-        for y, linea_nombre in zip((6, 24), _partir_nombre(nombre, calibracion["util"]))
+        'B{},{},0,{},{},{},{},N,"{}"'.format(
+            x, zpl_builder.Y_BARRAS, TIPOS_EPL[comando], modulo, modulo * 2,
+            ALTO_BARRAS, _escapar(codigo),
+        ),
+        _texto(x, zpl_builder.Y_NUMERO, util, codigo, fuente_codigo),
+        _texto(x, zpl_builder.Y_NOMBRE, util, nombre, FUENTE_NOMBRE),
     ]
     if precio:
+        precio = textos.precio_corto(precio)
+        doble_ancho = len(precio) * AVANCE_FUENTE[FUENTE_PRECIO] * 2 <= util
         lineas.append(
-            'A{},48,0,{},2,2,N,"{}"'.format(x + margen, FUENTE, _escapar(precio))
+            _texto(x, zpl_builder.Y_PRECIO, util, precio, FUENTE_PRECIO,
+                   2 if doble_ancho else 1, 2)
         )
-        y_barcode = 84
-    else:
-        y_barcode = 60
-
-    lineas.append(
-        'B{},{},0,{},{},{},{},N,"{}"'.format(
-            x + margen, y_barcode, tipo, modulo, modulo * 2, ALTO_BARRAS, _escapar(codigo)
-        )
-    )
-    lineas.append(
-        'A{},{},0,1,1,1,N,"{}"'.format(x + margen, y_barcode + 44, _escapar(codigo))
-    )
     return lineas
 
 
 def _encabezado(calibracion):
     """Lineas comunes a toda etiqueta.
 
-    Con oscuridad 0 no se emite el comando D y la impresora usa la densidad que
-    tiene configurada. En EPL2 la densidad es ABSOLUTA, asi que emitirla pisa la
-    calibracion de la impresora y puede dejarla demasiado clara.
+    No emite el comando D, igual que la app vieja: en EPL2 la densidad es
+    ABSOLUTA y emitirla pisa la calibracion de cada impresora.
     """
-    lineas = [
+    return [
         "N",
         "q{}".format(calibracion["ancho_total"]),
         "Q{},{}".format(calibracion["alto"], GAP),
     ]
-    if calibracion["oscuridad"]:
-        lineas.append("D{}".format(_oscuridad_epl(calibracion["oscuridad"])))
-    return lineas
 
 
 def etiqueta(nombre, precio, codigo, calibracion):

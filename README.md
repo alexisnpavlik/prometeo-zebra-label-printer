@@ -1,7 +1,7 @@
 # Etiquetas Zebra
 
-Imprime etiquetas de producto en una Zebra GC420t con rollo 3-across, a partir
-del TXT que exporta Odoo.
+Imprime etiquetas de producto en una Zebra GC420t o GT800/GT820 con rollo
+3-across, a partir del TXT que exporta Odoo.
 
 Hecho por [Prometeo](https://prometeo.com.ar).
 
@@ -72,23 +72,36 @@ mal, el boton **Restaurar valores por defecto** vuelve a los valores del rollo
 actual.
 
 Valores del rollo actual: ancho 736, alto 166, offsets `0, 256, 508`, margen 11,
-ancho util 190, oscuridad 0.
+ancho util 190.
 
-### Oscuridad
+### Densidad (oscuridad)
 
-Por defecto es **0: la app no toca la densidad** y cada impresora usa la que tiene
-configurada. Es lo correcto, porque el ajuste no es portable entre impresoras:
+La app **no manda ningun comando de densidad**, igual que `zebra_label_printer_odoo`,
+que imprime nitido en todas las Zebra. Cada impresora usa la que tiene configurada.
 
-- En ZPL, `^MD` es **relativo** a la densidad de la impresora. Un `-6` que queda
-  bien en una configurada en 15 deja en 4 a una configurada en 10: sale borrosa,
-  como si le faltara tinta.
-- En EPL2 el comando `D` es **absoluto** y pisa directamente la calibracion de la
-  impresora.
+Hasta v1.0.2 habia un campo "Oscuridad" que emitia `^MD` (o `D` en EPL), y los
+`config.json` creados por v1.0.0 y v1.0.1 quedaron con `-6`. `^MD` es relativo:
+una GT800 viene de fabrica en 10, y con `-6` imprimia en 4, borroso, como sin
+tinta. Desde esta version esa clave del `config.json` se ignora.
 
-Solo conviene tocarla cuando una impresora concreta imprime mal por su propia
-configuracion. En la GC420t de esta instalacion, con densidad 15 de fabrica, las
-barras engordaban y el EAN no leia; ahi `-6` lo resolvia. Ese valor **vale para esa
-impresora**, no para todas.
+Si una impresora sale clara, se ajusta en la impresora: la GT800 tiene un selector
+fisico de oscuridad (bajo, medio +3, alto +6), o con Zebra Setup Utilities.
+
+### Tamaño de letra
+
+Misma disposicion y fuentes que la app vieja: barras arriba, numero, nombre en
+una linea (`^A0N,20,10`) y precio en `^A0N,48,24`. Con letras mas chicas los
+trazos quedan de 1 dot y salen borrosos. El nombre se recorta con un punto si no
+entra en el ancho util; el precio pierde los centavos en cero.
+
+## Impresoras compatibles
+
+Toda la geometria esta en dots de **203 dpi**: GC420t, GT800, GT820, ZD421-203dpi.
+
+- **GT800/GT820**: aceptan ZPL y EPL y detectan solas cual les llega, asi que
+  sirven los dos lenguajes. Soportan UTF-8 (`^CI28`), asi que los acentos salen.
+- **300 dpi** (GT830, GT800-300): no estan soportadas. Todo saldria a dos tercios
+  del tamaño, y EPL directamente no existe en 300 dpi.
 
 ## Descargas
 
