@@ -546,8 +546,6 @@ class Aplicacion(tk.Tk):
                 return "Los offsets no pueden ser negativos."
             if offset + datos["margen"] + datos["util"] > datos["ancho_total"]:
                 return "Algun offset + margen + ancho util supera el ancho total."
-        if not -30 <= datos["oscuridad"] <= 30:
-            return "La oscuridad tiene que estar entre -30 y 30."
         return None
 
     def _abrir_calibracion(self):
@@ -569,7 +567,6 @@ class Aplicacion(tk.Tk):
             ("alto", "Alto (^LL)"),
             ("margen", "Margen interno"),
             ("util", "Ancho util"),
-            ("oscuridad", "Oscuridad (^MD)"),
         ]
         for indice, (clave, texto) in enumerate(etiquetas):
             fila = indice + 1

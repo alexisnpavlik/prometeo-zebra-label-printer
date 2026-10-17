@@ -21,7 +21,15 @@ class TestConfig(unittest.TestCase):
         cal = config.cargar(self.ruta)
         self.assertEqual(cal["ancho_total"], 736)
         self.assertEqual(cal["alto"], 166)
-        self.assertEqual(cal["oscuridad"], 0)  # 0 = respetar la de la impresora
+        self.assertNotIn("oscuridad", cal)  # la densidad es de cada impresora
+
+    def test_descarta_la_oscuridad_de_un_config_viejo(self):
+        """v1.0.0 y v1.0.1 dejaron "oscuridad": -6 y la app lo seguia mandando."""
+        with open(self.ruta, "w") as f:
+            json.dump({"oscuridad": -6, "offsets": [0, 250, 500]}, f)
+        cal = config.cargar(self.ruta)
+        self.assertNotIn("oscuridad", cal)
+        self.assertEqual(cal["offsets"], [0, 250, 500])
 
     def test_el_lenguaje_por_defecto_es_zpl(self):
         self.assertEqual(config.cargar(self.ruta)["lenguaje"], "zpl")

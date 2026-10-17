@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
+import re
 import unittest
 
 from config import config
-from modules import zpl_builder
+from modules import textos, zpl_builder
 
 CAL = dict(config.CALIBRACION_DEFECTO)
 
@@ -32,22 +33,51 @@ class TestEtiqueta(unittest.TestCase):
         self.assertIn("^PW736", zpl)
         self.assertIn("^LL166", zpl)
 
-    def test_sin_oscuridad_no_emite_md(self):
-        """Con 0 manda la densidad de la impresora, no la nuestra."""
-        zpl = zpl_builder.etiqueta("ANAFE", None, "7794824658488", dict(CAL, oscuridad=0))
+    def test_nunca_emite_md(self):
+        """Como la app vieja: la densidad la pone cada impresora, no la app."""
+        zpl = zpl_builder.etiqueta("ANAFE", "$41.000,00", "7794824658488", CAL)
         self.assertNotIn("^MD", zpl)
 
-    def test_con_oscuridad_emite_md(self):
+    def test_un_config_viejo_con_oscuridad_tampoco_emite_md(self):
+        """Los config.json de v1.0.0/v1.0.1 quedaron con oscuridad -6."""
         zpl = zpl_builder.etiqueta("ANAFE", None, "7794824658488", dict(CAL, oscuridad=-6))
-        self.assertIn("^MD-6", zpl)
+        self.assertNotIn("^MD", zpl)
 
-    def test_con_precio_lo_incluye(self):
+    def test_usa_las_fuentes_de_la_app_vieja(self):
         zpl = zpl_builder.etiqueta("ANAFE", "$41.000,00", "7794824658488", CAL)
-        self.assertEqual(zpl.count("$41.000,00"), 3)
+        self.assertIn("^A0N,20,10^FB190,1,0,C,0^FH\\^FDANAFE^FS", zpl)
+        self.assertIn("^A0N,48,24^FB190,1,0,C,0^FH\\^FD$41.000^FS", zpl)
+
+    def test_precio_largo_va_en_la_fuente_chica(self):
+        zpl = zpl_builder.etiqueta("ANAFE", "$1.234.567,50", "7794824658488", CAL)
+        self.assertIn("^A0N,40,16^FB190,1,0,C,0^FH\\^FD$1.234.567,50^FS", zpl)
+
+    def test_con_precio_lo_incluye_sin_centavos_en_cero(self):
+        zpl = zpl_builder.etiqueta("ANAFE", "$41.000,00", "7794824658488", CAL)
+        self.assertEqual(zpl.count("^FD$41.000^FS"), 3)
+        self.assertNotIn(",00", zpl)
 
     def test_sin_precio_no_lo_incluye(self):
         zpl = zpl_builder.etiqueta("ANAFE", None, "7794824658488", CAL)
         self.assertNotIn("$", zpl)
+
+    def test_nombre_largo_se_recorta_para_no_pisarse(self):
+        """^FB de una linea encima el texto que no entra: hay que cortarlo antes."""
+        nombre = "ANAFE 1 HORNALLA ESMALTADO REDUCCION BRONCE CONOMETAL"
+        zpl = zpl_builder.etiqueta(nombre, None, "7794824658488", CAL)
+        self.assertNotIn(nombre, zpl)
+        recortado = re.search(r"\^A0N,20,10\^FB190,1,0,C,0\^FH\\\^FD(.*?)\^FS", zpl).group(1)
+        self.assertTrue(recortado.endswith("."))
+        self.assertTrue(nombre.startswith(recortado[:-1]))
+        self.assertLessEqual(textos.ancho(recortado, textos.ancho_a0_nombre), CAL["util"])
+
+    def test_los_bloques_no_se_pisan_y_entran_en_la_etiqueta(self):
+        """Barras, numero, nombre y precio, de arriba hacia abajo y sin solaparse."""
+        fin_barras = zpl_builder.Y_BARRAS + zpl_builder.ALTO_BARRAS + zpl_builder.BAJADA_GUARDAS
+        self.assertLess(fin_barras, zpl_builder.Y_NUMERO)
+        self.assertLessEqual(zpl_builder.Y_NUMERO + zpl_builder.ALTO_NUMERO, zpl_builder.Y_NOMBRE)
+        self.assertLessEqual(zpl_builder.Y_NOMBRE + 20, zpl_builder.Y_PRECIO)
+        self.assertLessEqual(zpl_builder.Y_PRECIO + 48, 160)  # 20 mm a 203 dpi
 
     def test_codigo_invalido_propaga_el_error(self):
         with self.assertRaises(ValueError):
