@@ -12,6 +12,7 @@ CALIBRACION_DEFECTO = {
     "offsets": [0, 256, 508],  # x de cada columna; el paso NO es uniforme
     "margen": 11,         # margen interno de cada columna
     "util": 190,          # ancho disponible para el contenido
+    "margen_superior": 5,  # baja todo el contenido; con 5 queda centrado en los 20 mm
     "lenguaje": "zpl",    # "zpl" o "epl"; se elige a mano, no se autodetecta
     "impresora": "",     # nombre de cola recordado; vacio si nunca se imprimio
     "tema": "claro",     # apariencia de la GUI: "claro" u "oscuro"

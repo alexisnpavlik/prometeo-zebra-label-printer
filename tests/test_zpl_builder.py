@@ -64,12 +64,55 @@ class TestEtiqueta(unittest.TestCase):
     def test_nombre_largo_se_recorta_para_no_pisarse(self):
         """^FB de una linea encima el texto que no entra: hay que cortarlo antes."""
         nombre = "ANAFE 1 HORNALLA ESMALTADO REDUCCION BRONCE CONOMETAL"
-        zpl = zpl_builder.etiqueta(nombre, None, "7794824658488", CAL)
+        zpl = zpl_builder.etiqueta(nombre, "$500", "7794824658488", CAL)
         self.assertNotIn(nombre, zpl)
         recortado = re.search(r"\^A0N,20,10\^FB190,1,0,C,0\^FH\\\^FD(.*?)\^FS", zpl).group(1)
         self.assertTrue(recortado.endswith("."))
         self.assertTrue(nombre.startswith(recortado[:-1]))
         self.assertLessEqual(textos.ancho(recortado, textos.ancho_a0_nombre), CAL["util"])
+
+    def test_sin_precio_numero_y_nombre_van_grandes(self):
+        zpl = zpl_builder.etiqueta("ANAFE", None, "7794824658488", CAL)
+        self.assertIn("^A0N,28,16^FB190,1,0,C,0^FH\\^FD7794824658488^FS", zpl)
+        self.assertIn("^A0N,28,13^FB190,1,0,C,0^FH\\^FDANAFE^FS", zpl)
+        self.assertNotIn("^A0N,20,10", zpl)
+
+    def test_sin_precio_el_nombre_largo_ocupa_dos_lineas(self):
+        nombre = '"OFERTA FINAL" CUCHILLO ACERO INOXIDABLE MANGO MADERA'
+        bloque = zpl_builder._columna(0, nombre, None, "7794658976179", CAL)
+        lineas = re.findall(r"\^A0N,28,13\^FB190,1,0,C,0\^FH\\\^FD(.*?)\^FS", bloque)
+        self.assertEqual(len(lineas), 2)
+        self.assertEqual(lineas[0], '"OFERTA FINAL" CUCHILLO')
+        self.assertTrue(lineas[1].endswith("."))
+        for linea in lineas:
+            self.assertLessEqual(textos.ancho(linea, textos.ancho_a0(13)), CAL["util"])
+
+    def test_sin_precio_un_codigo_largo_vuelve_a_la_fuente_chica(self):
+        codigo = "123456789012345678901234"
+        bloque = zpl_builder._columna(0, "PILA", None, codigo, CAL)
+        self.assertIn("^A0N,18,10^FB190,1,0,C,0^FH\\^FD{}^FS".format(codigo), bloque)
+
+    def test_el_margen_superior_baja_cada_campo_sin_tocar_lh(self):
+        """^LH queda grabado en la impresora: el margen va sumado a cada ^FO."""
+        for precio in (None, "$500"):
+            with self.subTest(precio=precio):
+                sin = zpl_builder.etiqueta("ANAFE", precio, "7794824658488", dict(CAL, margen_superior=0))
+                con = zpl_builder.etiqueta("ANAFE", precio, "7794824658488", dict(CAL, margen_superior=12))
+                self.assertIn("^LH0,0", con)
+                ys_sin = [int(y) for y in re.findall(r"\^FO\d+,(\d+)", sin)]
+                ys_con = [int(y) for y in re.findall(r"\^FO\d+,(\d+)", con)]
+                self.assertEqual(ys_con, [y + 12 for y in ys_sin])
+
+    def test_con_el_margen_por_defecto_todo_entra_en_el_alto(self):
+        bajada = CAL["margen_superior"]
+        fin_con_precio = zpl_builder.Y_PRECIO + 48
+        fin_sin_precio = zpl_builder.Y_NOMBRE_GRANDE + zpl_builder.ALTO_NOMBRE_GRANDE * zpl_builder.LINEAS_NOMBRE_GRANDE
+        self.assertLessEqual(bajada + max(fin_con_precio, fin_sin_precio), CAL["alto"])
+
+    def test_sin_precio_los_bloques_grandes_entran_en_la_etiqueta(self):
+        self.assertLessEqual(zpl_builder.Y_NUMERO + zpl_builder.ALTO_NUMERO_GRANDE, zpl_builder.Y_NOMBRE_GRANDE)
+        fin_nombre = zpl_builder.Y_NOMBRE_GRANDE + zpl_builder.ALTO_NOMBRE_GRANDE * zpl_builder.LINEAS_NOMBRE_GRANDE
+        self.assertLessEqual(fin_nombre, 160)
 
     def test_los_bloques_no_se_pisan_y_entran_en_la_etiqueta(self):
         """Barras, numero, nombre y precio, de arriba hacia abajo y sin solaparse."""
