@@ -72,7 +72,14 @@ mal, el boton **Restaurar valores por defecto** vuelve a los valores del rollo
 actual.
 
 Valores del rollo actual: ancho 736, alto 166, offsets `0, 256, 508`, margen 11,
-ancho util 190.
+ancho util 190, margen superior 5 (centrado).
+
+"Margen superior" baja todo el contenido (barras, numero, nombre y precio) esa
+cantidad de dots. Se suma a cada campo en vez de mandarse como `^LH`/`R`, que
+quedarian grabados en la impresora y correrian las etiquetas de Odoo.
+
+Sin precio, el numero y el nombre se imprimen mas grandes y el nombre ocupa dos
+lineas; con precio, todo queda en la fuente chica de la app vieja.
 
 ### Densidad (oscuridad)
 

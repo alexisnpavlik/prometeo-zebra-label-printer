@@ -16,6 +16,16 @@ class TestEtiqueta(unittest.TestCase):
         epl = epl_builder.etiqueta("ANAFE", None, "7794824658488", CAL)
         self.assertIn("q736", epl)
         self.assertIn("Q166,24", epl)
+        self.assertFalse(any(l.startswith("R") for l in epl.splitlines()))
+
+    def test_el_margen_superior_baja_cada_linea(self):
+        for precio in (None, "$500"):
+            with self.subTest(precio=precio):
+                sin = epl_builder._columna(0, "ANAFE", precio, "7794824658488", dict(CAL, margen_superior=0))
+                con = epl_builder._columna(0, "ANAFE", precio, "7794824658488", dict(CAL, margen_superior=12))
+                ys_sin = [int(l.split(",")[1]) for l in sin]
+                ys_con = [int(l.split(",")[1]) for l in con]
+                self.assertEqual(ys_con, [y + 12 for y in ys_sin])
 
     def test_nunca_emite_densidad(self):
         """En EPL la densidad es absoluta: emitirla pisaria la de la impresora."""
@@ -58,6 +68,8 @@ class TestEtiqueta(unittest.TestCase):
             ("ANAFE 1 HORNALLA ESMALTADO REDUCCION BRONCE", "$41.000,00", "7794824658488"),
             ("PILA", "$1.234.567,50", "123456"),
             ("WWWWWWWWWWWWWWWWWWWWWWWW", "$5", "677870568079"),
+            ("ANAFE 1 HORNALLA ESMALTADO REDUCCION BRONCE", None, "7794824658488"),
+            ("PILA", None, "123456789012345678901234"),
         ]
         for nombre, precio, codigo in casos:
             for linea in epl_builder._columna(0, nombre, precio, codigo, CAL):
@@ -72,6 +84,21 @@ class TestEtiqueta(unittest.TestCase):
     def test_sin_precio_no_lo_incluye(self):
         epl = epl_builder.etiqueta("ANAFE", None, "7794824658488", CAL)
         self.assertNotIn("$", epl)
+
+    def test_sin_precio_numero_y_nombre_van_en_la_fuente_grande(self):
+        lineas = epl_builder._columna(0, "ANAFE", None, "7794824658488", CAL)
+        textos_a = [l for l in lineas if l.startswith("A")]
+        self.assertEqual(len(textos_a), 2)
+        for linea in textos_a:
+            self.assertEqual(linea.split(",")[3], str(epl_builder.FUENTE_GRANDE))
+
+    def test_sin_precio_el_nombre_largo_ocupa_dos_lineas(self):
+        nombre = "ANAFE 1 HORNALLA ESMALTADO REDUCCION BRONCE"
+        lineas = epl_builder._columna(0, nombre, None, "7794824658488", CAL)
+        nombres = [l for l in lineas if l.startswith("A")][1:]
+        self.assertEqual(len(nombres), 2)
+        self.assertIn('"ANAFE 1"', nombres[0])
+        self.assertTrue(nombres[1].endswith('."'))
 
     def test_escapa_las_comillas_del_nombre(self):
         epl = epl_builder.etiqueta('ANAFE "O.F"', None, "7794824658488", CAL)

@@ -25,6 +25,8 @@ ALTO_BARRAS = zpl_builder.ALTO_BARRAS
 AVANCE_FUENTE = {1: 10, 2: 12, 3: 14, 4: 16, 5: 34}
 FUENTE_NOMBRE = 2
 FUENTE_PRECIO = 3
+# Sin precio el numero y el nombre suben a la fuente 3 y el nombre usa dos lineas.
+FUENTE_GRANDE = 3
 
 
 def _escapar(texto):
@@ -52,27 +54,44 @@ def _texto(x, y, util, texto, fuente, mult_h=1, mult_v=1):
 
 
 def _columna(x, nombre, precio, codigo, calibracion):
-    """Devuelve las lineas EPL de una columna con offset horizontal x."""
+    """Devuelve las lineas EPL de una columna con offset horizontal x.
+
+    El margen superior se suma a cada Y en vez de mandarse como R: R queda
+    grabado en la impresora y correria las etiquetas de las otras apps.
+    """
     x = x + calibracion["margen"]
+    arriba = calibracion["margen_superior"]
     util = calibracion["util"]
     comando, modulo = barcodes.elegir_barcode(codigo, util)
-    fuente_codigo = 2 if len(codigo) * AVANCE_FUENTE[2] <= util else 1
+    fuentes_codigo = (2, 1) if precio else (FUENTE_GRANDE, 2, 1)
+    fuente_codigo = next(
+        (f for f in fuentes_codigo if len(codigo) * AVANCE_FUENTE[f] <= util), 1
+    )
 
     lineas = [
         'B{},{},0,{},{},{},{},N,"{}"'.format(
-            x, zpl_builder.Y_BARRAS, TIPOS_EPL[comando], modulo, modulo * 2,
+            x, arriba + zpl_builder.Y_BARRAS, TIPOS_EPL[comando], modulo, modulo * 2,
             ALTO_BARRAS, _escapar(codigo),
         ),
-        _texto(x, zpl_builder.Y_NUMERO, util, codigo, fuente_codigo),
-        _texto(x, zpl_builder.Y_NOMBRE, util, nombre, FUENTE_NOMBRE),
+        _texto(x, arriba + zpl_builder.Y_NUMERO, util, codigo, fuente_codigo),
     ]
-    if precio:
-        precio = textos.precio_corto(precio)
-        doble_ancho = len(precio) * AVANCE_FUENTE[FUENTE_PRECIO] * 2 <= util
-        lineas.append(
-            _texto(x, zpl_builder.Y_PRECIO, util, precio, FUENTE_PRECIO,
-                   2 if doble_ancho else 1, 2)
+    if not precio:
+        avance = AVANCE_FUENTE[FUENTE_GRANDE]
+        partes = textos.partir_en_lineas(
+            nombre, util, lambda caracter: avance, zpl_builder.LINEAS_NOMBRE_GRANDE
         )
+        for indice, parte in enumerate(partes):
+            y = arriba + zpl_builder.Y_NOMBRE_GRANDE + indice * zpl_builder.ALTO_NOMBRE_GRANDE
+            lineas.append(_texto(x, y, util, parte, FUENTE_GRANDE))
+        return lineas
+
+    lineas.append(_texto(x, arriba + zpl_builder.Y_NOMBRE, util, nombre, FUENTE_NOMBRE))
+    precio = textos.precio_corto(precio)
+    doble_ancho = len(precio) * AVANCE_FUENTE[FUENTE_PRECIO] * 2 <= util
+    lineas.append(
+        _texto(x, arriba + zpl_builder.Y_PRECIO, util, precio, FUENTE_PRECIO,
+               2 if doble_ancho else 1, 2)
+    )
     return lineas
 
 

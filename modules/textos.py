@@ -6,6 +6,8 @@ precio sin centavos en cero, para que entre grande. Aca se hace lo mismo, pero
 midiendo el ancho real del texto en vez de cortar siempre en 20 caracteres.
 """
 
+import math
+
 # Avance por caracter de ^A0N,20,10 en dots, medido renderizando el texto en
 # Labelary y redondeado hacia arriba: sobreestimar solo acorta el nombre, pero
 # subestimar hace que ^FB lo parta y la segunda linea se imprima encima.
@@ -25,6 +27,17 @@ def ancho_a0_nombre(caracter):
     return _ANCHO_COMUN_A0
 
 
+def ancho_a0(ancho_fuente):
+    """Ancho por caracter de ^A0N con ancho `ancho_fuente`, escalado desde 10.
+
+    Se redondea hacia arriba por caracter: el firmware dibuja cada glifo en
+    dots enteros y sobreestimar solo acorta el texto, mientras que subestimar
+    hace que ^FB lo parta y la segunda linea se imprima encima.
+    """
+    escala = ancho_fuente / 10
+    return lambda caracter: math.ceil(ancho_a0_nombre(caracter) * escala)
+
+
 def ancho(texto, ancho_de):
     """Ancho total de `texto`, con `ancho_de(caracter)` dando el de cada uno."""
     return sum(ancho_de(caracter) for caracter in texto)
@@ -39,6 +52,30 @@ def recortar(texto, ancho_max, ancho_de):
         if ancho(recortado, ancho_de) <= ancho_max:
             return recortado
     return ""
+
+
+def partir_en_lineas(texto, ancho_max, ancho_de, cantidad):
+    """Reparte `texto` en hasta `cantidad` lineas cortando entre palabras.
+
+    Una palabra que no entra sola en una linea se corta donde caiga. Lo que
+    sobra despues de la ultima linea se recorta con punto, igual que `recortar`.
+    """
+    lineas = []
+    resto = texto.strip()
+    while resto and len(lineas) < cantidad - 1:
+        if ancho(resto, ancho_de) <= ancho_max:
+            break
+        largo = len(resto)
+        while largo > 0 and ancho(resto[:largo], ancho_de) > ancho_max:
+            largo -= 1
+        corte = resto.rfind(" ", 0, largo + 1)
+        if corte <= 0:
+            corte = largo
+        lineas.append(resto[:corte].rstrip())
+        resto = resto[corte:].strip()
+    if resto:
+        lineas.append(recortar(resto, ancho_max, ancho_de))
+    return lineas
 
 
 def precio_corto(precio):

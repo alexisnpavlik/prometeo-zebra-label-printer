@@ -539,6 +539,8 @@ class Aplicacion(tk.Tk):
             return "El ancho util tiene que ser mayor que cero."
         if datos["margen"] < 0:
             return "El margen no puede ser negativo."
+        if not 0 <= datos["margen_superior"] < datos["alto"]:
+            return "El margen superior tiene que estar entre 0 y el alto."
         if datos["margen"] + datos["util"] > datos["ancho_total"]:
             return "Margen + ancho util no puede superar el ancho total."
         for offset in datos["offsets"]:
@@ -566,6 +568,7 @@ class Aplicacion(tk.Tk):
             ("ancho_total", "Ancho total (^PW)"),
             ("alto", "Alto (^LL)"),
             ("margen", "Margen interno"),
+            ("margen_superior", "Margen superior"),
             ("util", "Ancho util"),
         ]
         for indice, (clave, texto) in enumerate(etiquetas):

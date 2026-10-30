@@ -20,6 +20,23 @@ class TestPrecioCorto(unittest.TestCase):
         self.assertEqual(textos.precio_corto("  $500,00 "), "$500")
 
 
+class TestPartirEnLineas(unittest.TestCase):
+    def test_si_entra_queda_en_una_linea(self):
+        self.assertEqual(textos.partir_en_lineas("ANAFE", 100, ancho_fijo, 2), ["ANAFE"])
+
+    def test_corta_entre_palabras(self):
+        lineas = textos.partir_en_lineas("ANAFE ESMALTADO BRONCE", 160, ancho_fijo, 2)
+        self.assertEqual(lineas, ["ANAFE ESMALTADO", "BRONCE"])
+
+    def test_lo_que_sobra_se_recorta_en_la_ultima_linea(self):
+        lineas = textos.partir_en_lineas("ANAFE ESMALTADO BRONCE GRANDE", 100, ancho_fijo, 2)
+        self.assertEqual(lineas, ["ANAFE", "ESMALTADO."])
+
+    def test_palabra_mas_larga_que_la_linea_se_corta_donde_cae(self):
+        lineas = textos.partir_en_lineas("ABCDEFGHIJKL", 50, ancho_fijo, 2)
+        self.assertEqual(lineas, ["ABCDE", "FGHI."])
+
+
 class TestRecortar(unittest.TestCase):
     def test_si_entra_no_lo_toca(self):
         self.assertEqual(textos.recortar("ANAFE", 50, ancho_fijo), "ANAFE")
